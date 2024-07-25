@@ -47,15 +47,15 @@ html {
 }
 
 .highlight {
+  overflow: auto;
+  padding-bottom: 0.75rem;
+
   @extend %rounded;
   @extend %code-snippet-bg;
 
   @at-root figure#{&} {
     @extend %code-snippet-bg;
   }
-
-  overflow: auto;
-  padding-bottom: 0.75rem;
 
   pre {
     margin-bottom: 0;
