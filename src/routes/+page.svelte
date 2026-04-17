@@ -606,112 +606,76 @@
 
 <svelte:window onkeydown={handleGlobalKeydown} />
 
-<main class="lab-shell">
-  <section class="hero-strip">
-    <div class="hero-copy">
-      <p class="eyebrow">browser runtime experiment</p>
-      <h1>{profile.handle}</h1>
-      <p class="hero-text">
-        xterm front-end, worker runtime, shared VFS, Pyodide-backed Python, and enough shell semantics to feel
-        suspiciously real.
-      </p>
+<main class="shell">
+  <header class="masthead">
+    <div class="masthead-left">
+      <h1>
+        <span class="caret" aria-hidden="true">❯</span>{profile.handle}
+      </h1>
+      <p class="strap">{profile.strapline}</p>
     </div>
-    <div class="hero-meta">
-      <div>
-        <span>status</span>
-        <strong>{status}</strong>
-      </div>
-      <div>
-        <span>engine</span>
-        <strong>xterm.js + Pyodide</strong>
-      </div>
-      <div>
-        <span>persisted</span>
-        <strong>/home/magni only</strong>
-      </div>
+    <div class="masthead-right" aria-live="polite">
+      <span class="dot" data-state={status}></span>
+      <span class="status-label">{status}</span>
     </div>
+  </header>
+
+  <section class="terminal-frame" aria-label="Runtime terminal">
+    <div class="terminal-host" bind:this={terminalHost}></div>
   </section>
 
-  <section class="terminal-frame">
-    <header class="frame-topbar">
-      <div class="window-lights" aria-hidden="true">
-        <span></span>
-        <span></span>
-        <span></span>
-      </div>
-      <div class="frame-title">Magniquick Runtime Lab</div>
-      <div class="frame-actions">
-        <button
-          type="button"
-          onclick={() => {
-            worker?.postMessage({ type: 'clear' } satisfies RuntimeRequest)
-          }}
-        >
-          clear
-        </button>
-        <button
-          type="button"
-          onclick={() => {
-            worker?.postMessage({ type: 'reset-session' } satisfies RuntimeRequest)
-          }}
-        >
-          reset shell
-        </button>
-        <button
-          type="button"
-          onclick={() => {
-            searchOpen = !searchOpen
-          }}
-        >
-          search
-        </button>
-      </div>
-    </header>
+  <nav class="actions" aria-label="Terminal actions">
+    <button
+      type="button"
+      onclick={() => {
+        worker?.postMessage({ type: 'clear' } satisfies RuntimeRequest)
+      }}
+    >
+      <span class="num">01</span>clear
+    </button>
+    <button
+      type="button"
+      onclick={() => {
+        worker?.postMessage({ type: 'reset-session' } satisfies RuntimeRequest)
+      }}
+    >
+      <span class="num">02</span>reset
+    </button>
+    <button
+      type="button"
+      class:active={searchOpen}
+      onclick={() => {
+        searchOpen = !searchOpen
+      }}
+    >
+      <span class="num">03</span>search
+    </button>
+  </nav>
 
-    {#if searchOpen}
-      <div class="search-strip">
-        <label>
-          <span>buffer search</span>
-          <input
-            value={searchValue}
-            oninput={handleSearchInput}
-            onkeydown={handleSearchKeydown}
-            placeholder="look for output"
-          />
-        </label>
-        <button type="button" onclick={runSearch}>
-          next
-        </button>
-      </div>
-    {/if}
-
-    <div class="runtime-grid">
-      <aside class="sidecard">
-        <p class="sidecard-label">seed commands</p>
-        <ul>
-          <li>ls /home/magni</li>
-          <li>cat /home/magni/README.txt</li>
-          <li>echo $SHELL</li>
-          <li>python /home/magni/welcome.py</li>
-          <li>echo "print(7 * 6)" | python</li>
-        </ul>
-      </aside>
-
-      <div class="terminal-shell">
-        <div class="terminal-host" bind:this={terminalHost} aria-label="Runtime terminal"></div>
-      </div>
-
-      <aside class="sidecard sidecard-projects">
-        <p class="sidecard-label">featured repos</p>
-        <ul>
-          {#each visibleProjects as project (project.name)}
-            <li>
-              <span>{project.name}</span>
-              <small>{project.language}</small>
-            </li>
-          {/each}
-        </ul>
-      </aside>
+  {#if searchOpen}
+    <div class="search-row">
+      <span class="search-prompt">/</span>
+      <input
+        value={searchValue}
+        oninput={handleSearchInput}
+        onkeydown={handleSearchKeydown}
+        placeholder="find in buffer, enter to jump"
+      />
+      <button type="button" onclick={runSearch}>next ↵</button>
     </div>
-  </section>
+  {/if}
+
+  <footer class="colophon">
+    <div class="col">
+      <span class="key">try</span>
+      <code>ls /home/magni</code>
+      <code>help</code>
+      <code>python</code>
+    </div>
+    <div class="col col-right">
+      <a href={profile.githubUrl} target="_blank" rel="noopener noreferrer">{profile.githubUrl.replace('https://', '')}</a>
+      <span class="sep" aria-hidden="true">·</span>
+      <span class="meta">xterm.js + pyodide, all client-side</span>
+    </div>
+  </footer>
 </main>
