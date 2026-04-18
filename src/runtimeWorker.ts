@@ -6,6 +6,13 @@ import { Directory, File } from '@bjorn3/browser_wasi_shim'
 import { runJokeCommand } from './jokeCommands'
 import { runWasiTool } from './wasiTools'
 import * as fsState from './fsState'
+import {
+  UUTILS_COMMANDS,
+  UUTILS_FILESYSTEM_COMMANDS,
+  UUTILS_IMPLICIT_CWD_COMMANDS,
+  UUTILS_OPTION_PATH_VALUE_FLAGS,
+  UUTILS_OPTION_VALUE_FLAGS,
+} from './generated/uutilsMetadata'
 import { featuredProjects, projectArchive } from './data/projects'
 import { profile } from './data/profile'
 import type { RuntimeEvent, RuntimeRequest, ShellMode } from './runtimeProtocol'
@@ -90,31 +97,35 @@ const ANSI = {
   red: ansiRgb('red'),
   text: ansiRgb('text'),
 } as const
-const HELP_TEXT = `builtins
 
-pwd
+function wrapWords(words: readonly string[], width = 76) {
+  const lines: string[] = []
+  let line = ''
+  for (const word of words) {
+    if (line && line.length + word.length + 1 > width) {
+      lines.push(line)
+      line = word
+      continue
+    }
+    line = line ? `${line} ${word}` : word
+  }
+  if (line) {
+    lines.push(line)
+  }
+  return lines.join('\n')
+}
+
+const HELP_TEXT = `shell builtins
+
 cd <path>
-ls [path]
 tree [path]
-mkdir <path...>
-touch <path...>
-cat <file...>
 less <file>
-echo <args...>
 grep [options] PATTERN [FILE...]
-head [FILE...]
-tail [FILE...]
-sort [FILE...]
 which COMMAND...
 hostname
 uptime
 neofetch
-true
-false
 getconf NAME
-rmdir <path...>
-chmod MODE FILE...
-ln <src> <dst>
 xxd [FILE]
 jq FILTER [FILE]
 curl URL
@@ -135,6 +146,10 @@ help
 python
 python file.py
 python -c "print('hi')"
+
+uutils wasm applets
+
+${wrapWords(UUTILS_COMMANDS)}
 
 operators
 
@@ -492,13 +507,15 @@ function walkPaths(path: string): string[] {
 }
 
 const BUILTIN_COMMANDS = [
-  'alias', 'cat', 'cd', 'chmod', 'clear', 'cp', 'curl', 'echo', 'env', 'false', 'getconf', 'grep', 'head',
-  'help', 'history', 'hostname', 'jq', 'jsh', 'kill', 'less', 'ln', 'ls', 'mkdir', 'mv', 'neofetch', 'printenv',
-  'ps', 'pwd', 'python', 'rm', 'rmdir', 'sort', 'tail', 'touch', 'tree', 'true', 'unset', 'uptime', 'wc', 'which', 'xxd',
-  'export', 'nix', 'apt', 'brew', 'yum', 'miku', 'sudo', 'su', 'pacman', 'starwars',
+  'alias', 'cd', 'clear', 'curl', 'env', 'export', 'getconf', 'grep', 'help', 'history', 'hostname', 'jq',
+  'jsh', 'kill', 'less', 'neofetch', 'ps', 'python', 'tree', 'unset', 'uptime', 'which', 'xxd',
+  'nix', 'apt', 'brew', 'yum', 'miku', 'sudo', 'su', 'pacman', 'starwars',
 ]
-const COMPLETABLE_COMMANDS = BUILTIN_COMMANDS
-const WASI_COMMANDS_WITH_IMPLICIT_CWD = new Set(['ls'])
+const UUTILS_COMMAND_SET = new Set<string>(UUTILS_COMMANDS)
+const ALL_COMMANDS = [...BUILTIN_COMMANDS, ...UUTILS_COMMANDS].sort((left, right) => left.localeCompare(right))
+const COMPLETABLE_COMMANDS = ALL_COMMANDS
+const UUTILS_FILESYSTEM_COMMAND_SET = new Set<string>(UUTILS_FILESYSTEM_COMMANDS)
+const WASI_COMMANDS_WITH_IMPLICIT_CWD = new Set<string>(UUTILS_IMPLICIT_CWD_COMMANDS)
 
 function commonPrefix(values: string[]) {
   if (values.length === 0) {
@@ -665,7 +682,7 @@ function seedHome() {
   fsState.mkdirp('/home')
   fsState.mkdirp(HOME_ROOT)
 
-  for (const command of BUILTIN_COMMANDS) {
+  for (const command of ALL_COMMANDS) {
     fsState.putFileText(
       `/bin/${command}`,
       `#!/bin/jsh-lite\n# builtin: ${command}\n`,
@@ -1296,36 +1313,76 @@ function unwrapEnvCommand(words: string[]) {
   return 'env'
 }
 
+function generatedFlagSet(
+  flags: Record<string, readonly string[]>,
+  command: string,
+) {
+  return new Set(flags[command] ?? [])
+}
+
+function looksLikeOptionValue(value: string) {
+  return /^[-+]?\d+(?:[.:,/a-zA-Z%+-]\w*)*$/.test(value) || /^[,.:/=%+-]$/.test(value)
+}
+
 function resolveWasiArgs(command: string, args: string[]) {
-  if (command === 'echo' || command === 'true' || command === 'false') {
+  if (!UUTILS_FILESYSTEM_COMMAND_SET.has(command)) {
     return args
   }
 
   const resolved: string[] = []
-  let skipNext = false
+  let nextValueMode: 'raw' | 'path' | null = null
   let seenChmodMode = false
   let pathOperandCount = 0
+  let operandsOnly = false
+  const rawValueFlags = generatedFlagSet(UUTILS_OPTION_VALUE_FLAGS, command)
+  const pathValueFlags = generatedFlagSet(UUTILS_OPTION_PATH_VALUE_FLAGS, command)
 
-  for (const arg of args) {
-    if (skipNext) {
-      resolved.push(arg)
-      skipNext = false
-      continue
-    }
-
-    if ((command === 'head' || command === 'tail') && (arg === '-n' || arg === '--lines' || arg === '-c' || arg === '--bytes')) {
-      resolved.push(arg)
-      skipNext = true
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index]!
+    if (nextValueMode) {
+      resolved.push(nextValueMode === 'path' ? resolvePath(arg) : arg)
+      if (nextValueMode === 'path') {
+        pathOperandCount += 1
+      }
+      nextValueMode = null
       continue
     }
 
     if (arg === '--') {
+      resolved.push(arg)
+      operandsOnly = true
+      continue
+    }
+
+    if (operandsOnly) {
+      resolved.push(resolvePath(arg))
+      pathOperandCount += 1
+      continue
+    }
+
+    const [optionName, optionValue] = arg.startsWith('--') && arg.includes('=') ? arg.split(/=(.*)/s, 2) : [arg, null]
+    if (optionValue !== null && pathValueFlags.has(optionName)) {
+      resolved.push(`${optionName}=${resolvePath(optionValue)}`)
+      pathOperandCount += 1
+      continue
+    }
+    if (optionValue !== null && rawValueFlags.has(optionName)) {
       resolved.push(arg)
       continue
     }
 
     if (arg === '-' || (arg.startsWith('-') && arg !== '-')) {
       resolved.push(arg)
+      if (pathValueFlags.has(arg)) {
+        nextValueMode = 'path'
+      } else if (rawValueFlags.has(arg)) {
+        nextValueMode = 'raw'
+      } else {
+        const next = args[index + 1]
+        if (next && !next.startsWith('-') && !fsState.exists(resolvePath(next)) && looksLikeOptionValue(next)) {
+          nextValueMode = 'raw'
+        }
+      }
       continue
     }
 
@@ -1366,29 +1423,15 @@ async function runSimpleCommand(words: string[], stdin: string): Promise<Runtime
     }
   }
 
+  if (UUTILS_COMMAND_SET.has(command)) {
+    return await runWasiTool(command, resolveWasiArgs(command, args), stdin, state.cwd)
+  }
+
   switch (command) {
     case 'pwd':
       return { stdout: `${state.cwd}\n`, stderr: '', status: 0 }
     case 'cd':
       return builtinCd(args)
-    case 'ls':
-    case 'cat':
-    case 'wc':
-    case 'head':
-    case 'tail':
-    case 'sort':
-    case 'mkdir':
-    case 'touch':
-    case 'rm':
-    case 'rmdir':
-    case 'cp':
-    case 'mv':
-    case 'ln':
-    case 'chmod':
-    case 'echo':
-    case 'true':
-    case 'false':
-      return await runWasiTool(command, resolveWasiArgs(command, args), stdin, state.cwd)
     case 'tree':
       return builtinTree(args)
     case 'less':
@@ -1787,7 +1830,7 @@ function builtinWhich(args: string[]): RuntimeCommandResult {
   if (args.length === 0) {
     return { stdout: '', stderr: 'which: missing operand\n', status: 1 }
   }
-  const builtins = new Set(BUILTIN_COMMANDS)
+  const builtins = new Set(ALL_COMMANDS)
   const lines: string[] = []
   let status = 0
   for (const name of args) {

@@ -80,7 +80,7 @@ export async function runWasiTool(
     'LC_ALL=C.UTF-8',
   ]
 
-  const wasi = new WASI(['coreutils', tool, ...args], env, [stdinFd, stdoutFd, stderrFd, preopen])
+  const wasi = new WASI(['coreutils', tool, ...args], env, [stdinFd, stdoutFd, stderrFd, preopen], { debug: false })
 
   const instance = await WebAssembly.instantiate(module, {
     wasi_snapshot_preview1: wasi.wasiImport as WebAssembly.ModuleImports,

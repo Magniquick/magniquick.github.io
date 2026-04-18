@@ -4,15 +4,17 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "generate": "bun run generate:starwars && bun run generate:uutils",
+    "generate:uutils": "bun scripts/generate-uutils-metadata.mjs",
     "generate:starwars": "bun scripts/generate-starwars-animation.mjs",
-    "predev": "bun run generate:starwars",
+    "predev": "bun run generate",
     "dev": "bun --bun vite dev",
-    "prebuild": "bun run generate:starwars",
+    "prebuild": "bun run generate",
     "build": "bun --bun svelte-kit sync && bun --bun vite build",
     "preview": "bun --bun vite preview",
-    "precheck": "bun run generate:starwars",
+    "precheck": "bun run generate",
     "check": "bun --bun svelte-kit sync && bun --bun svelte-check --tsconfig ./tsconfig.json",
-    "pretest:smoke": "bun run generate:starwars",
+    "pretest:smoke": "bun run generate",
     "test:smoke": "bun --bun playwright test"
   },
   "dependencies": {
