@@ -64,6 +64,7 @@ type ShellState = {
 
 const HOME_ROOT = '/home/magni'
 const HISTORY_FILE = `${HOME_ROOT}/.jsh_history`
+const PYODIDE_INDEX_URL = new URL('/pyodide/', self.location.origin).toString()
 const USERNAME = 'magni'
 const DEFAULT_PROMPT_USER = 'magniquick'
 const DEFAULT_HOSTNAME = 'lab'
@@ -849,6 +850,7 @@ async function bootstrapPython() {
         HOME: HOME_ROOT,
         TERM: state.env.TERM,
       },
+      indexURL: PYODIDE_INDEX_URL,
       stdin: () => pendingStdIn.shift() ?? '\n',
     })
 
