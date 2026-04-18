@@ -10,6 +10,18 @@ import {
 const wasmPath = 'static/coreutils.wasm'
 const outputPath = 'src/generated/uutilsMetadata.ts'
 const ansiPattern = /\x1b\[[0-?]*[ -/]*[@-~]/g
+const lsColors = [
+  'di=01;34',
+  'ln=01;36',
+  'ex=01;32',
+  '*.txt=00;33',
+  '*.md=00;33',
+  '*.json=00;36',
+  '*.js=00;32',
+  '*.mjs=00;32',
+  '*.py=00;35',
+  '*.wasm=00;36',
+].join(':')
 const modulePromise = WebAssembly.compile(await Bun.file(wasmPath).arrayBuffer())
 
 async function runCoreutils(args) {
@@ -39,8 +51,7 @@ async function runCoreutils(args) {
       'TERM=xterm-256color',
       'LC_ALL=C.UTF-8',
       'COLORTERM=truecolor',
-      'CLICOLOR_FORCE=1',
-      'FORCE_COLOR=1',
+      `LS_COLORS=${lsColors}`,
     ],
     fds,
     { debug: false },

@@ -516,6 +516,7 @@ const ALL_COMMANDS = [...BUILTIN_COMMANDS, ...UUTILS_COMMANDS].sort((left, right
 const COMPLETABLE_COMMANDS = ALL_COMMANDS
 const UUTILS_FILESYSTEM_COMMAND_SET = new Set<string>(UUTILS_FILESYSTEM_COMMANDS)
 const WASI_COMMANDS_WITH_IMPLICIT_CWD = new Set<string>(UUTILS_IMPLICIT_CWD_COMMANDS)
+const WASI_COMMANDS_WITH_DEFAULT_COLOR = new Set(['dir', 'ls', 'vdir'])
 
 function commonPrefix(values: string[]) {
   if (values.length === 0) {
@@ -1330,6 +1331,12 @@ function resolveWasiArgs(command: string, args: string[]) {
   }
 
   const resolved: string[] = []
+  const forceDefaultColor = WASI_COMMANDS_WITH_DEFAULT_COLOR.has(command)
+    && !args.some((arg) => arg === '--color' || arg.startsWith('--color='))
+  if (forceDefaultColor) {
+    resolved.push('--color=auto')
+  }
+
   let nextValueMode: 'raw' | 'path' | null = null
   let seenChmodMode = false
   let pathOperandCount = 0

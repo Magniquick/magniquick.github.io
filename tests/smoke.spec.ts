@@ -49,6 +49,38 @@ async function readPromptGlyphColor(page: Page) {
   })
 }
 
+async function readFirstGlyphColorForText(page: Page, text: string) {
+  return await page.evaluate((needle) => {
+    const terminal = window.__labTerminal
+    if (!terminal) {
+      return null
+    }
+
+    const buffer = terminal.buffer.active
+    const cell = buffer.getNullCell()
+    for (let lineIndex = buffer.length - 1; lineIndex >= 0; lineIndex -= 1) {
+      const line = buffer.getLine(lineIndex)
+      if (!line) {
+        continue
+      }
+      const textLine = line.translateToString(true)
+      const columnIndex = textLine.indexOf(needle)
+      if (columnIndex === -1) {
+        continue
+      }
+      const current = line.getCell(columnIndex, cell)
+      if (!current || current.isFgDefault()) {
+        return 'default'
+      }
+      if (current.isFgRGB()) {
+        return current.getFgColor().toString(16).padStart(6, '0')
+      }
+      return `palette:${current.getFgColor()}`
+    }
+    return null
+  }, text)
+}
+
 async function sendCommand(page: Page, command: string) {
   const promptSerialBefore = await page.evaluate(() => window.__labRuntimeState?.promptSerial ?? 0)
   const input = page.locator('.xterm-helper-textarea')
@@ -109,11 +141,12 @@ test('runtime lab boots and executes shared shell/python commands', async ({ pag
   await sendCommand(page, 'ls -lah /home/magni')
   await expect.poll(async () => await readTerminalBuffer(page)).toContain('README.txt')
 
-  await sendCommand(page, 'ls --color=always')
+  await sendCommand(page, 'ls')
   const bareLsOutput = await readTerminalBuffer(page)
   expect(bareLsOutput).toContain('README.txt')
   expect(bareLsOutput).toContain('welcome.py')
   expect(bareLsOutput).not.toContain('bin  home  tmp')
+  await expect.poll(async () => await readFirstGlyphColorForText(page, 'README.txt')).not.toBe('default')
 
   await sendCommand(page, 'ls /bin')
   await expect.poll(async () => await readTerminalBuffer(page)).toContain('ls')

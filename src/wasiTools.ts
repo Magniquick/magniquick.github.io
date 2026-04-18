@@ -19,6 +19,18 @@ export type WasiResult = {
 let modulePromise: Promise<WebAssembly.Module> | null = null
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 const WASM_URL = '/coreutils.wasm'
+const LS_COLORS = [
+  'di=01;34',
+  'ln=01;36',
+  'ex=01;32',
+  '*.txt=00;33',
+  '*.md=00;33',
+  '*.json=00;36',
+  '*.js=00;32',
+  '*.mjs=00;32',
+  '*.py=00;35',
+  '*.wasm=00;36',
+].join(':')
 
 function loadModule(): Promise<WebAssembly.Module> {
   if (!modulePromise) {
@@ -79,8 +91,7 @@ export async function runWasiTool(
     'TERM=xterm-256color',
     'LC_ALL=C.UTF-8',
     'COLORTERM=truecolor',
-    'CLICOLOR_FORCE=1',
-    'FORCE_COLOR=1',
+    `LS_COLORS=${LS_COLORS}`,
   ]
 
   const wasi = new WASI(['coreutils', tool, ...args], env, [stdinFd, stdoutFd, stderrFd, preopen], { debug: false })
