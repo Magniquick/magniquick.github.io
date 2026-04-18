@@ -8,14 +8,14 @@
     "generate:uutils": "bun scripts/generate-uutils-metadata.mjs",
     "generate:starwars": "bun scripts/generate-starwars-animation.mjs",
     "predev": "bun run generate",
-    "dev": "bun --bun vite dev",
+    "dev": "env -u NO_COLOR FORCE_COLOR=1 bun --bun vite dev",
     "prebuild": "bun run generate",
-    "build": "bun --bun svelte-kit sync && bun --bun vite build",
-    "preview": "bun --bun vite preview",
+    "build": "env -u NO_COLOR FORCE_COLOR=1 bun --bun svelte-kit sync && env -u NO_COLOR FORCE_COLOR=1 bun --bun vite build",
+    "preview": "env -u NO_COLOR FORCE_COLOR=1 bun --bun vite preview",
     "precheck": "bun run generate",
-    "check": "bun --bun svelte-kit sync && bun --bun svelte-check --tsconfig ./tsconfig.json",
+    "check": "env -u NO_COLOR FORCE_COLOR=1 bun --bun svelte-kit sync && env -u NO_COLOR FORCE_COLOR=1 bun --bun svelte-check --tsconfig ./tsconfig.json",
     "pretest:smoke": "bun run generate",
-    "test:smoke": "env -u NO_COLOR bun --bun playwright test"
+    "test:smoke": "env -u NO_COLOR FORCE_COLOR=1 bun --bun playwright test"
   },
   "dependencies": {
     "@bjorn3/browser_wasi_shim": "^0.4.2",

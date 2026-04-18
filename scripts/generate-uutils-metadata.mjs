@@ -31,7 +31,17 @@ async function runCoreutils(args) {
 
   const wasi = new WASI(
     ['coreutils', ...args],
-    ['PATH=/bin', 'HOME=/home/magni', 'PWD=/home/magni', 'USER=magni', 'TERM=xterm-256color', 'LC_ALL=C.UTF-8'],
+    [
+      'PATH=/bin',
+      'HOME=/home/magni',
+      'PWD=/home/magni',
+      'USER=magni',
+      'TERM=xterm-256color',
+      'LC_ALL=C.UTF-8',
+      'COLORTERM=truecolor',
+      'CLICOLOR_FORCE=1',
+      'FORCE_COLOR=1',
+    ],
     fds,
     { debug: false },
   )

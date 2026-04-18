@@ -78,6 +78,9 @@ export async function runWasiTool(
     'USER=magni',
     'TERM=xterm-256color',
     'LC_ALL=C.UTF-8',
+    'COLORTERM=truecolor',
+    'CLICOLOR_FORCE=1',
+    'FORCE_COLOR=1',
   ]
 
   const wasi = new WASI(['coreutils', tool, ...args], env, [stdinFd, stdoutFd, stderrFd, preopen], { debug: false })
