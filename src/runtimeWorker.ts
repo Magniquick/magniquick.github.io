@@ -9,13 +9,7 @@ import bashWasmUrl from 'tree-sitter-bash/tree-sitter-bash.wasm?url'
 import { runJokeCommand } from './jokeCommands'
 import { runWasiTool } from './wasiTools'
 import * as fsState from './fsState'
-import {
-  UUTILS_COMMANDS,
-  UUTILS_FILESYSTEM_COMMANDS,
-  UUTILS_IMPLICIT_CWD_COMMANDS,
-  UUTILS_OPTION_PATH_VALUE_FLAGS,
-  UUTILS_OPTION_VALUE_FLAGS,
-} from './generated/uutilsMetadata'
+import { UUTILS_COMMANDS } from './generated/uutilsMetadata'
 import { featuredProjects, projectArchive } from './data/projects'
 import { profile } from './data/profile'
 import type { RuntimeEvent, RuntimeRequest, ShellMode } from './runtimeProtocol'
@@ -511,9 +505,6 @@ const BUILTIN_COMMAND_SET = new Set<string>(BUILTIN_COMMANDS)
 const UUTILS_COMMAND_SET = new Set<string>(UUTILS_COMMANDS)
 const ALL_COMMANDS = [...BUILTIN_COMMANDS, ...UUTILS_COMMANDS].sort((left, right) => left.localeCompare(right))
 const COMPLETABLE_COMMANDS = ALL_COMMANDS
-const UUTILS_FILESYSTEM_COMMAND_SET = new Set<string>(UUTILS_FILESYSTEM_COMMANDS)
-const WASI_COMMANDS_WITH_IMPLICIT_CWD = new Set<string>(UUTILS_IMPLICIT_CWD_COMMANDS)
-const WASI_COMMANDS_WITH_DEFAULT_COLOR = new Set(['dir', 'ls', 'vdir'])
 
 function commonPrefix(values: string[]) {
   if (values.length === 0) {
@@ -788,6 +779,16 @@ function syncTreeToPyodide() {
   }
 }
 
+function syncPyodideCwd() {
+  if (!pyodide) {
+    return
+  }
+  if (!fsState.isDir(state.cwd)) {
+    throw new Error(`${state.cwd}: no such directory`)
+  }
+  pyodide.FS.chdir(state.cwd)
+}
+
 function syncPyodideTreeToFsState(path: string) {
   if (!pyodide) {
     return
@@ -822,12 +823,14 @@ function syncPyodideToFsState() {
 async function bootstrapPython() {
   if (pyodide) {
     syncTreeToPyodide()
+    syncPyodideCwd()
     return pyodide
   }
 
   if (pyodideBootPromise) {
     await pyodideBootPromise
     syncTreeToPyodide()
+    syncPyodideCwd()
     if (!pyodide) {
       throw new Error('Python runtime failed to initialize')
     }
@@ -865,8 +868,6 @@ async function bootstrapPython() {
       pyodide.setInterruptBuffer(interruptBuffer)
     }
 
-    syncTreeToPyodide()
-
     await pyodide.runPythonAsync(`
 import code
 import runpy
@@ -879,6 +880,9 @@ def _magni_push(line: str) -> bool:
 def _magni_run_path(path: str):
     runpy.run_path(path, run_name="__main__")
 `)
+
+    syncTreeToPyodide()
+    syncPyodideCwd()
 
     return pyodide
   })()
@@ -1341,102 +1345,6 @@ function unwrapEnvCommand(words: string[]) {
   return 'env'
 }
 
-function generatedFlagSet(
-  flags: Record<string, readonly string[]>,
-  command: string,
-) {
-  return new Set(flags[command] ?? [])
-}
-
-function looksLikeOptionValue(value: string) {
-  return /^[-+]?\d+(?:[.:,/a-zA-Z%+-]\w*)*$/.test(value) || /^[,.:/=%+-]$/.test(value)
-}
-
-function resolveWasiArgs(command: string, args: string[]) {
-  if (!UUTILS_FILESYSTEM_COMMAND_SET.has(command)) {
-    return args
-  }
-
-  const resolved: string[] = []
-  const forceDefaultColor = WASI_COMMANDS_WITH_DEFAULT_COLOR.has(command)
-    && !args.some((arg) => arg === '--color' || arg.startsWith('--color='))
-  if (forceDefaultColor) {
-    resolved.push('--color=auto')
-  }
-
-  let nextValueMode: 'raw' | 'path' | null = null
-  let seenChmodMode = false
-  let pathOperandCount = 0
-  let operandsOnly = false
-  const rawValueFlags = generatedFlagSet(UUTILS_OPTION_VALUE_FLAGS, command)
-  const pathValueFlags = generatedFlagSet(UUTILS_OPTION_PATH_VALUE_FLAGS, command)
-
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index]!
-    if (nextValueMode) {
-      resolved.push(nextValueMode === 'path' ? resolvePath(arg) : arg)
-      if (nextValueMode === 'path') {
-        pathOperandCount += 1
-      }
-      nextValueMode = null
-      continue
-    }
-
-    if (arg === '--') {
-      resolved.push(arg)
-      operandsOnly = true
-      continue
-    }
-
-    if (operandsOnly) {
-      resolved.push(resolvePath(arg))
-      pathOperandCount += 1
-      continue
-    }
-
-    const [optionName, optionValue] = arg.startsWith('--') && arg.includes('=') ? arg.split(/=(.*)/s, 2) : [arg, null]
-    if (optionValue !== null && pathValueFlags.has(optionName)) {
-      resolved.push(`${optionName}=${resolvePath(optionValue)}`)
-      pathOperandCount += 1
-      continue
-    }
-    if (optionValue !== null && rawValueFlags.has(optionName)) {
-      resolved.push(arg)
-      continue
-    }
-
-    if (arg === '-' || (arg.startsWith('-') && arg !== '-')) {
-      resolved.push(arg)
-      if (pathValueFlags.has(arg)) {
-        nextValueMode = 'path'
-      } else if (rawValueFlags.has(arg)) {
-        nextValueMode = 'raw'
-      } else {
-        const next = args[index + 1]
-        if (next && !next.startsWith('-') && !fsState.exists(resolvePath(next)) && looksLikeOptionValue(next)) {
-          nextValueMode = 'raw'
-        }
-      }
-      continue
-    }
-
-    if (command === 'chmod' && !seenChmodMode) {
-      resolved.push(arg)
-      seenChmodMode = true
-      continue
-    }
-
-    resolved.push(resolvePath(arg))
-    pathOperandCount += 1
-  }
-
-  if (WASI_COMMANDS_WITH_IMPLICIT_CWD.has(command) && pathOperandCount === 0) {
-    resolved.push(state.cwd)
-  }
-
-  return resolved
-}
-
 async function runSimpleCommand(words: string[], stdin: string): Promise<RuntimeCommandResult> {
   if (words.length === 0) {
     return { stdout: '', stderr: '', status: 0 }
@@ -1458,7 +1366,7 @@ async function runSimpleCommand(words: string[], stdin: string): Promise<Runtime
   }
 
   if (UUTILS_COMMAND_SET.has(command) && !BUILTIN_COMMAND_SET.has(command)) {
-    return await runWasiTool(command, resolveWasiArgs(command, args), stdin, state.cwd)
+    return await runWasiTool(command, args, stdin, state.cwd)
   }
 
   switch (command) {
@@ -2348,6 +2256,7 @@ async function runPythonScript(scriptPath: string) {
   if (!pyodide) {
     throw new Error('Python runtime not ready')
   }
+  syncPyodideCwd()
   pyodide.globals.set('_magni_run_path_target', scriptPath)
   await pyodide.runPythonAsync('_magni_run_path(_magni_run_path_target)')
 }
@@ -2356,6 +2265,7 @@ async function runPythonCode(code: string) {
   if (!pyodide) {
     throw new Error('Python runtime not ready')
   }
+  syncPyodideCwd()
   await pyodide.runPythonAsync(code)
 }
 
@@ -2369,9 +2279,9 @@ async function pushPythonReplLine(line: string) {
 }
 
 async function builtinPython(args: string[], stdin: string): Promise<RuntimeCommandResult> {
-  await bootstrapPython()
-
   try {
+    await bootstrapPython()
+
     if (args.length === 0) {
       if (stdin.trim()) {
         await runPythonCode(stdin)
