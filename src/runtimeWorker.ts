@@ -1303,6 +1303,7 @@ function resolveWasiArgs(command: string, args: string[]) {
   const resolved: string[] = []
   let skipNext = false
   let seenChmodMode = false
+  let pathOperandCount = 0
 
   for (const arg of args) {
     if (skipNext) {
@@ -1334,6 +1335,11 @@ function resolveWasiArgs(command: string, args: string[]) {
     }
 
     resolved.push(resolvePath(arg))
+    pathOperandCount += 1
+  }
+
+  if (command === 'ls' && pathOperandCount === 0) {
+    resolved.push(state.cwd)
   }
 
   return resolved

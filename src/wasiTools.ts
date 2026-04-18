@@ -77,7 +77,6 @@ export async function runWasiTool(
     `PWD=${cwd}`,
     'USER=magni',
     'TERM=xterm-256color',
-    'NO_COLOR=',
     'LC_ALL=C.UTF-8',
   ]
 
