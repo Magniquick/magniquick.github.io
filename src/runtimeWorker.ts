@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 
 import { flavors } from '@catppuccin/palette'
+import { toJsonObject, type JSONOutput as CurlRequest } from 'curlconverter/dist/src/generators/json.js'
 import type { PyodideAPI } from 'pyodide'
 import { Directory, File } from '@bjorn3/browser_wasi_shim'
 import { Language, Parser, type Node as TreeSitterNode } from 'web-tree-sitter'
@@ -1951,88 +1952,56 @@ function builtinJq(args: string[], stdin: string): RuntimeCommandResult {
 }
 
 async function builtinCurl(args: string[], _stdin: string): Promise<RuntimeCommandResult> {
-  let method = 'GET'
-  let includeHeaders = false
-  let headOnly = false
-  let silent = false
-  let followRedirects = false
-  let outputPath: string | null = null
-  const headers = new Headers()
-  const operands: string[] = []
-
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index]
-    if (arg === '-I') {
-      headOnly = true
-      method = 'HEAD'
-      continue
-    }
-    if (arg === '-i') {
-      includeHeaders = true
-      continue
-    }
-    if (arg === '-s') {
-      silent = true
-      continue
-    }
-    if (arg === '-L') {
-      followRedirects = true
-      continue
-    }
-    if (arg === '-X') {
-      method = args[index + 1] ?? method
-      index += 1
-      continue
-    }
-    if (arg === '-H') {
-      const value = args[index + 1]
-      if (!value) {
-        return { stdout: '', stderr: 'curl: option requires an argument -- H\n', status: 2 }
-      }
-      const [key, ...rest] = value.split(':')
-      headers.set(key.trim(), rest.join(':').trim())
-      index += 1
-      continue
-    }
-    if (arg === '-o' || arg === '--output') {
-      outputPath = resolvePath(args[index + 1] ?? '')
-      if (!args[index + 1]) {
-        return { stdout: '', stderr: 'curl: option requires an argument -- o\n', status: 2 }
-      }
-      index += 1
-      continue
-    }
-    operands.push(arg)
-  }
-
-  const url = operands.at(-1)
-  if (!url) {
-    return { stdout: '', stderr: 'curl: no URL specified\n', status: 2 }
-  }
-
   try {
-    const response = await fetch(url, {
+    const request = toJsonObject(['curl', ...args]) as CurlRequest
+    if (!request.url) {
+      return { stdout: '', stderr: 'curl: no URL specified\n', status: 2 }
+    }
+
+    const method = request.method.toUpperCase()
+    const headers = new Headers()
+    for (const [key, value] of Object.entries(request.headers ?? {})) {
+      if (value !== null) {
+        headers.set(key, value)
+      }
+    }
+    if (request.auth && !headers.has('authorization')) {
+      headers.set('authorization', `Basic ${btoa(`${request.auth.user}:${request.auth.password}`)}`)
+    }
+
+    const controller = new AbortController()
+    const timeoutSeconds = request.timeout ?? request.connect_timeout
+    const timeout = timeoutSeconds ? setTimeout(() => controller.abort(), timeoutSeconds * 1000) : null
+    const response = await fetch(request.url, {
+      body: method === 'GET' || method === 'HEAD' ? undefined : request.data === undefined ? undefined : String(request.data),
       cache: 'no-store',
       method,
       headers,
-      redirect: followRedirects ? 'follow' : 'manual',
+      redirect: request.follow_redirects ? 'follow' : 'manual',
+      signal: controller.signal,
+    }).finally(() => {
+      if (timeout) {
+        clearTimeout(timeout)
+      }
     })
+
     let output = ''
-    if (includeHeaders || headOnly) {
+    if (request.include || method === 'HEAD') {
       output += `HTTP ${response.status} ${response.statusText}\n`
       response.headers.forEach((value, key) => {
         output += `${key}: ${value}\n`
       })
       output += '\n'
     }
-    if (!headOnly) {
+    if (method !== 'HEAD') {
       output += await response.text()
     }
-    if (outputPath) {
-      fsState.putFileText(outputPath, output)
+
+    if (request.output) {
+      fsState.putFileText(resolvePath(request.output), output)
       return { stdout: '', stderr: '', status: response.ok ? 0 : 22 }
     }
-    return { stdout: silent ? '' : output, stderr: '', status: response.ok ? 0 : 22 }
+    return { stdout: output, stderr: '', status: response.ok ? 0 : 22 }
   } catch (error) {
     return { stdout: '', stderr: `curl: ${error instanceof Error ? error.message : String(error)}\n`, status: 6 }
   }
