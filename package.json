@@ -4,15 +4,15 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "generate:starwars": "node scripts/generate-starwars-animation.mjs",
-    "predev": "npm run generate:starwars",
+    "generate:starwars": "bun scripts/generate-starwars-animation.mjs",
+    "predev": "bun run generate:starwars",
     "dev": "vite dev",
-    "prebuild": "npm run generate:starwars",
+    "prebuild": "bun run generate:starwars",
     "build": "svelte-kit sync && vite build",
     "preview": "vite preview",
-    "precheck": "npm run generate:starwars",
+    "precheck": "bun run generate:starwars",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "pretest:smoke": "npm run generate:starwars",
+    "pretest:smoke": "bun run generate:starwars",
     "test:smoke": "playwright test"
   },
   "dependencies": {
