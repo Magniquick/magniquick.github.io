@@ -498,6 +498,7 @@ const BUILTIN_COMMANDS = [
   'export', 'nix', 'apt', 'brew', 'yum', 'miku', 'sudo', 'su', 'pacman', 'starwars',
 ]
 const COMPLETABLE_COMMANDS = BUILTIN_COMMANDS
+const WASI_COMMANDS_WITH_IMPLICIT_CWD = new Set(['ls'])
 
 function commonPrefix(values: string[]) {
   if (values.length === 0) {
@@ -1338,7 +1339,7 @@ function resolveWasiArgs(command: string, args: string[]) {
     pathOperandCount += 1
   }
 
-  if (command === 'ls' && pathOperandCount === 0) {
+  if (WASI_COMMANDS_WITH_IMPLICIT_CWD.has(command) && pathOperandCount === 0) {
     resolved.push(state.cwd)
   }
 

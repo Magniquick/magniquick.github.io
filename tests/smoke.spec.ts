@@ -109,6 +109,12 @@ test('runtime lab boots and executes shared shell/python commands', async ({ pag
   await sendCommand(page, 'ls -lah /home/magni')
   await expect.poll(async () => await readTerminalBuffer(page)).toContain('README.txt')
 
+  await sendCommand(page, 'ls --color=always')
+  const bareLsOutput = await readTerminalBuffer(page)
+  expect(bareLsOutput).toContain('README.txt')
+  expect(bareLsOutput).toContain('welcome.py')
+  expect(bareLsOutput).not.toContain('bin  home  tmp')
+
   await sendCommand(page, 'ls /bin')
   await expect.poll(async () => await readTerminalBuffer(page)).toContain('ls')
   await expect.poll(async () => await readTerminalBuffer(page)).toContain('python')
