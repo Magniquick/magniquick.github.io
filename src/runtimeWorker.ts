@@ -3,6 +3,7 @@
 import { flavors } from '@catppuccin/palette'
 import type { PyodideAPI } from 'pyodide'
 import { runJokeCommand } from './jokeCommands'
+import { runWasiTool } from './wasiTools'
 import { featuredProjects, projectArchive } from './data/projects'
 import { profile } from './data/profile'
 import type { RuntimeEvent, RuntimeRequest, ShellMode } from './runtimeProtocol'
@@ -704,6 +705,7 @@ const BUILTIN_COMMANDS = [
   'help', 'history', 'hostname', 'jq', 'jsh', 'kill', 'less', 'ln', 'ls', 'mkdir', 'mv', 'neofetch', 'printenv',
   'ps', 'pwd', 'python', 'rm', 'rmdir', 'sort', 'tail', 'touch', 'tree', 'true', 'unset', 'uptime', 'which', 'xxd',
   'export', 'nix', 'apt', 'brew', 'yum', 'miku', 'sudo', 'su', 'pacman', 'starwars',
+  'wls', 'wcat', 'wwc', 'wsort', 'whead', 'wtail',
 ]
 const COMPLETABLE_COMMANDS = BUILTIN_COMMANDS
 
@@ -1584,6 +1586,16 @@ async function runSimpleCommand(words: string[], stdin: string): Promise<Runtime
       return builtinCd(args)
     case 'ls':
       return builtinLs(args)
+    case 'wls':
+    case 'wwc':
+    case 'wcat':
+    case 'wsort':
+    case 'whead':
+    case 'wtail': {
+      const toolName = command.slice(1)
+      const resolved = command === 'wls' && args.length === 0 ? [state.cwd] : args
+      return await runWasiTool(toolName, resolved, stdin, state.cwd, vfs)
+    }
     case 'tree':
       return builtinTree(args)
     case 'mkdir':
