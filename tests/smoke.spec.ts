@@ -261,7 +261,7 @@ test('runtime lab boots and executes shared shell/python commands', async ({ pag
   await expect.poll(async () => await readTerminalBuffer(page)).toContain('1\n2\n3')
 
   await sendCommand(page, "echo 'unterminated")
-  await expect.poll(async () => await readTerminalBuffer(page)).toContain('reached EOF without closing quote')
+  await expect.poll(async () => await readTerminalBuffer(page)).toContain('unexpected EOF while parsing shell input')
 
   await sendCommand(page, 'echo draft-value')
   await expect.poll(async () => await readTerminalBuffer(page)).toContain('draft-value')

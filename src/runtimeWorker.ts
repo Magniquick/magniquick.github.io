@@ -3,8 +3,9 @@
 import { flavors } from '@catppuccin/palette'
 import type { PyodideAPI } from 'pyodide'
 import { Directory, File } from '@bjorn3/browser_wasi_shim'
-import { getProcessor, LangVariant } from 'sh-syntax'
-import initShellSyntaxWasm from 'sh-syntax/main.wasm?init'
+import { Language, Parser, type Node as TreeSitterNode } from 'web-tree-sitter'
+import treeSitterWasmUrl from 'web-tree-sitter/web-tree-sitter.wasm?url'
+import bashWasmUrl from 'tree-sitter-bash/tree-sitter-bash.wasm?url'
 import { runJokeCommand } from './jokeCommands'
 import { runWasiTool } from './wasiTools'
 import * as fsState from './fsState'
@@ -21,21 +22,11 @@ import type { RuntimeEvent, RuntimeRequest, ShellMode } from './runtimeProtocol'
 
 declare const self: DedicatedWorkerGlobalScope
 
-const shellSyntax = getProcessor(initShellSyntaxWasm)
-
 type RuntimeCommandResult = {
   stdout: string
   stderr: string
   status: number
   clear?: boolean
-}
-
-type Token =
-  | { type: 'word'; value: string }
-  | { type: 'op'; value: '|' | ';' | '&&' | '||' | '>' | '>>' | '<' }
-
-function makeOpToken(value: Token['value']): Token {
-  return { type: 'op', value } as Token
 }
 
 type CommandNode = {
@@ -52,13 +43,13 @@ type PipelineNode = {
 type LogicalNode = {
   type: 'logical'
   op: '&&' | '||'
-  left: PipelineNode | LogicalNode
-  right: PipelineNode | LogicalNode
+  left: AstNode
+  right: AstNode
 }
 
 type SequenceNode = {
   type: 'sequence'
-  nodes: Array<PipelineNode | LogicalNode>
+  nodes: AstNode[]
 }
 
 type AstNode = PipelineNode | LogicalNode | SequenceNode
@@ -174,6 +165,7 @@ let activeCapture: { stdout: string; stderr: string } | null = null
 let pyodideBootPromise: Promise<PyodideAPI> | null = null
 let lastExitCode = 0
 let interruptSerial = 0
+let shellParserPromise: Promise<Parser> | null = null
 
 const state: ShellState = {
   cwd: HOME_ROOT,
@@ -512,9 +504,10 @@ function walkPaths(path: string): string[] {
 
 const BUILTIN_COMMANDS = [
   'alias', 'cd', 'clear', 'curl', 'env', 'export', 'getconf', 'grep', 'help', 'history', 'hostname', 'jq',
-  'jsh', 'kill', 'less', 'neofetch', 'ps', 'python', 'tree', 'unset', 'uptime', 'which', 'xxd',
+  'jsh', 'kill', 'less', 'neofetch', 'printenv', 'ps', 'pwd', 'python', 'tree', 'unset', 'uptime', 'which', 'xxd',
   'nix', 'apt', 'brew', 'yum', 'miku', 'sudo', 'su', 'pacman', 'starwars',
 ]
+const BUILTIN_COMMAND_SET = new Set<string>(BUILTIN_COMMANDS)
 const UUTILS_COMMAND_SET = new Set<string>(UUTILS_COMMANDS)
 const ALL_COMMANDS = [...BUILTIN_COMMANDS, ...UUTILS_COMMANDS].sort((left, right) => left.localeCompare(right))
 const COMPLETABLE_COMMANDS = ALL_COMMANDS
@@ -922,113 +915,6 @@ function resetSessionState() {
   state.lessOffset = 0
 }
 
-function tokenize(line: string) {
-  const tokens: Token[] = []
-  let current = ''
-  let index = 0
-
-  const pushCurrent = () => {
-    if (current) {
-      tokens.push({ type: 'word', value: current })
-      current = ''
-    }
-  }
-
-  const readVariable = () => {
-    if (line[index + 1] === '{') {
-      const end = line.indexOf('}', index + 2)
-      if (end !== -1) {
-        const name = line.slice(index + 2, end)
-        index = end
-        return state.env[name] ?? ''
-      }
-    }
-    let cursor = index + 1
-    while (cursor < line.length && /[A-Za-z0-9_]/.test(line[cursor])) {
-      cursor += 1
-    }
-    const name = line.slice(index + 1, cursor)
-    if (!name) {
-      return '$'
-    }
-    index = cursor - 1
-    return state.env[name] ?? ''
-  }
-
-  while (index < line.length) {
-    const char = line[index]
-    const next = line[index + 1]
-
-    if (/\s/.test(char)) {
-      pushCurrent()
-      index += 1
-      continue
-    }
-
-    if (char === "'" || char === '"') {
-      const quote = char
-      index += 1
-      while (index < line.length && line[index] !== quote) {
-        if (quote === '"' && line[index] === '$') {
-          current += readVariable()
-          index += 1
-          continue
-        }
-        if (quote === '"' && line[index] === '\\' && index + 1 < line.length) {
-          const escaped = line[index + 1]
-          if (escaped === '"' || escaped === '\\' || escaped === '$' || escaped === '`') {
-            current += escaped
-          } else {
-            current += `\\${escaped}`
-          }
-          index += 2
-          continue
-        }
-        current += line[index]
-        index += 1
-      }
-      if (index >= line.length) {
-        throw new Error('unterminated quote')
-      }
-      index += 1
-      continue
-    }
-
-    if (char === '\\' && index + 1 < line.length) {
-      current += line[index + 1]
-      index += 2
-      continue
-    }
-
-    if (char === '$') {
-      current += readVariable()
-      index += 1
-      continue
-    }
-
-    const op = `${char}${next ?? ''}`
-    if (op === '&&' || op === '||' || op === '>>') {
-      pushCurrent()
-      tokens.push(makeOpToken(op))
-      index += 2
-      continue
-    }
-
-    if (char === '|' || char === ';' || char === '>' || char === '<') {
-      pushCurrent()
-      tokens.push(makeOpToken(char))
-      index += 1
-      continue
-    }
-
-    current += char
-    index += 1
-  }
-
-  pushCurrent()
-  return tokens
-}
-
 function expandAlias(line: string) {
   let expanded = line
   const seen = new Set<string>()
@@ -1044,124 +930,251 @@ function expandAlias(line: string) {
   }
 }
 
-async function normalizeShellSyntax(line: string) {
-  const normalized = await shellSyntax(line, {
-    print: true,
-    singleLine: true,
-    keepComments: false,
-    variant: LangVariant.LangBash,
-  })
-  return normalized.trim()
+async function getShellParser() {
+  shellParserPromise ??= (async () => {
+    await Parser.init({
+      locateFile(path: string) {
+        return path.endsWith('.wasm') ? treeSitterWasmUrl : path
+      },
+    })
+    const language = await Language.load(bashWasmUrl)
+    const parser = new Parser()
+    parser.setLanguage(language)
+    return parser
+  })()
+  return shellParserPromise
 }
 
-function parseCommand(tokens: Token[], startIndex: number) {
-  const words: string[] = []
-  const redirections: CommandNode['redirections'] = []
-  let index = startIndex
+function firstNamedChild(node: TreeSitterNode, type?: string) {
+  return node.namedChildren.find((child) => !type || child.type === type) ?? null
+}
 
-  while (index < tokens.length) {
-    const token = tokens[index]
-    if (token.type === 'op') {
-      if (token.value === '>' || token.value === '>>' || token.value === '<') {
-        const target = tokens[index + 1]
-        if (!target || target.type !== 'word') {
-          throw new Error(`expected target after ${token.value}`)
+function fieldForNamedChild(parent: TreeSitterNode, childIndex: number) {
+  return parent.fieldNameForNamedChild(childIndex)
+}
+
+function unescapeShellText(text: string) {
+  return text.replace(/\\(.)/g, '$1')
+}
+
+function unescapeDoubleQuotedText(text: string) {
+  return text.replace(/\\(["\\$`])/g, '$1')
+}
+
+function expandVariableNode(node: TreeSitterNode) {
+  const name = firstNamedChild(node, 'variable_name')?.text
+  return name ? state.env[name] ?? '' : ''
+}
+
+function expandWordNode(node: TreeSitterNode): string {
+  if (node.type === 'raw_string') {
+    return node.text.slice(1, -1)
+  }
+  if (node.type === 'simple_expansion' || node.type === 'expansion') {
+    return expandVariableNode(node)
+  }
+  if (node.type === 'string') {
+    return node.children
+      .filter((child) => child.isNamed)
+      .map((child) => child.type === 'string_content' ? unescapeDoubleQuotedText(child.text) : expandWordNode(child))
+      .join('')
+  }
+  if (node.type === 'concatenation') {
+    return node.namedChildren.map(expandWordNode).join('')
+  }
+  if (node.type === 'command_name') {
+    return expandWordNode(firstNamedChild(node) ?? node)
+  }
+  if (node.type === 'word' || node.type === 'number' || node.type === 'string_content') {
+    return unescapeShellText(node.text)
+  }
+  throw new Error(`unsupported shell word: ${node.type}`)
+}
+
+function convertVariableAssignment(node: TreeSitterNode) {
+  const name = node.childForFieldName('name')?.text
+  if (!name) {
+    throw new Error('unsupported shell assignment')
+  }
+  const value = node.childForFieldName('value')
+  return `${name}=${value ? expandWordNode(value) : ''}`
+}
+
+function appendRedirect(node: TreeSitterNode, redirections: CommandNode['redirections']) {
+  const op = node.children.find((child) => !child.isNamed)?.text
+  if (op !== '>' && op !== '>>' && op !== '<') {
+    throw new Error(`unsupported redirection: ${op ?? node.text}`)
+  }
+  const target = node.childForFieldName('destination')
+  if (!target) {
+    throw new Error(`expected target after ${op}`)
+  }
+  redirections.push({ op, target: expandWordNode(target) })
+}
+
+function appendRedirections(node: TreeSitterNode, target: AstNode) {
+  const redirects = node.childrenForFieldName('redirect')
+  if (redirects.length === 0) {
+    return target
+  }
+  if (target.type !== 'pipeline') {
+    throw new Error('unsupported redirection on logical expression')
+  }
+  const command = target.commands.at(-1)
+  if (!command) {
+    throw new Error('unsupported empty redirection target')
+  }
+  for (const redirect of redirects) {
+    appendRedirect(redirect, command.redirections)
+  }
+  return target
+}
+
+function convertShellCommand(command: TreeSitterNode): CommandNode {
+  const words: string[] = []
+  const assignments: string[] = []
+  const redirections: CommandNode['redirections'] = []
+
+  command.namedChildren.forEach((child, index) => {
+    const field = fieldForNamedChild(command, index)
+    if (child.type === 'variable_assignment') {
+      assignments.push(convertVariableAssignment(child))
+      return
+    }
+    if (field === 'name' || field === 'argument') {
+      words.push(expandWordNode(child))
+      return
+    }
+    if (field === 'redirect') {
+      appendRedirect(child, redirections)
+      return
+    }
+    throw new Error(`unsupported shell command part: ${child.type}`)
+  })
+
+  if (words.length === 0 && redirections.length > 0) {
+    throw new Error('unsupported redirection without command')
+  }
+
+  return {
+    type: 'command',
+    words: assignments.length > 0
+      ? words.length > 0
+        ? ['env', ...assignments, ...words]
+        : ['export', ...assignments]
+      : words,
+    redirections,
+  }
+}
+
+function convertShellNode(node: TreeSitterNode): AstNode {
+  if (node.type === 'command') {
+    return {
+      type: 'pipeline',
+      commands: [convertShellCommand(node)],
+    }
+  }
+
+  if (node.type === 'pipeline') {
+    return {
+      type: 'pipeline',
+      commands: node.namedChildren.map((child) => {
+        if (child.type !== 'command') {
+          throw new Error(`unsupported pipeline part: ${child.type}`)
         }
-        redirections.push({ op: token.value, target: target.value })
-        index += 2
+        return convertShellCommand(child)
+      }),
+    }
+  }
+
+  if (node.type === 'redirected_statement') {
+    const body = node.childForFieldName('body')
+    if (!body) {
+      throw new Error('unsupported redirection without command')
+    }
+    return appendRedirections(node, convertShellNode(body))
+  }
+
+  if (node.type === 'list') {
+    let current: AstNode | null = null
+    let pendingOp: '&&' | '||' | null = null
+    const sequence: AstNode[] = []
+
+    for (const child of node.children) {
+      if (!child.isNamed) {
+        if (child.text === '&&' || child.text === '||') {
+          pendingOp = child.text
+        }
         continue
       }
-      break
+
+      const next = convertShellNode(child)
+      if (!current) {
+        current = next
+      } else if (pendingOp) {
+        current = { type: 'logical', op: pendingOp, left: current, right: next }
+        pendingOp = null
+      } else {
+        sequence.push(current)
+        current = next
+      }
     }
-    words.push(token.value)
-    index += 1
+
+    if (current) {
+      sequence.push(current)
+    }
+    if (sequence.length === 0) {
+      throw new Error('unsupported empty shell list')
+    }
+    return sequence.length === 1 ? sequence[0] : { type: 'sequence', nodes: sequence }
   }
 
-  return {
-    node: {
-      type: 'command',
-      words,
-      redirections,
-    } satisfies CommandNode,
-    index,
-  }
+  throw new Error(`unsupported shell node: ${node.type}`)
 }
 
-function parsePipeline(tokens: Token[], startIndex: number) {
-  const commands: CommandNode[] = []
-  let index = startIndex
-
-  for (;;) {
-    const { node, index: nextIndex } = parseCommand(tokens, index)
-    if (node.words.length === 0 && node.redirections.length === 0) {
-      throw new Error('expected command')
-    }
-    commands.push(node)
-    index = nextIndex
-
-    if (tokens[index]?.type === 'op' && tokens[index].value === '|') {
-      index += 1
-      continue
-    }
-    break
+function findFirstErrorNode(node: TreeSitterNode): TreeSitterNode | null {
+  if (node.isError || node.isMissing) {
+    return node
   }
-
-  return {
-    node: {
-      type: 'pipeline',
-      commands,
-    } satisfies PipelineNode,
-    index,
+  if (!node.hasError) {
+    return null
   }
+  for (const child of node.children) {
+    const found = findFirstErrorNode(child)
+    if (found) {
+      return found
+    }
+  }
+  return node
 }
 
-function parseLogical(tokens: Token[], startIndex: number): { node: PipelineNode | LogicalNode; index: number } {
-  const parsed = parsePipeline(tokens, startIndex)
-  let node: PipelineNode | LogicalNode = parsed.node
-  let index = parsed.index
-
-  while (tokens[index]?.type === 'op' && (tokens[index].value === '&&' || tokens[index].value === '||')) {
-    const op = tokens[index].value as '&&' | '||'
-    const right = parsePipeline(tokens, index + 1)
-    node = {
-      type: 'logical',
-      op,
-      left: node,
-      right: right.node,
-    }
-    index = right.index
+function formatShellParseError(line: string, root: TreeSitterNode) {
+  const errorNode = findFirstErrorNode(root)
+  if (!errorNode || errorNode.text.includes('\0') || errorNode.endIndex >= line.length) {
+    return 'syntax error: unexpected EOF while parsing shell input'
   }
-
-  return { node, index }
+  return `syntax error near ${JSON.stringify(errorNode.text)}`
 }
 
-function parseSequence(tokens: Token[]): AstNode {
-  const nodes: Array<PipelineNode | LogicalNode> = []
-  let index = 0
-
-  while (index < tokens.length) {
-    const parsed = parseLogical(tokens, index)
-    nodes.push(parsed.node)
-    index = parsed.index
-
-    if (index >= tokens.length) {
-      break
-    }
-
-    const token = tokens[index]
-    if (token.type !== 'op' || token.value !== ';') {
-      throw new Error(`unexpected token: ${token.value}`)
-    }
-    index += 1
+async function parseShellAst(line: string): Promise<AstNode | null> {
+  const parser = await getShellParser()
+  parser.reset()
+  const tree = parser.parse(line)
+  if (!tree) {
+    throw new Error('syntax error: parser failed')
   }
-
-  if (nodes.length === 1) {
-    return nodes[0]
-  }
-
-  return {
-    type: 'sequence',
-    nodes,
+  try {
+    const root = tree.rootNode
+    if (root.hasError) {
+      throw new Error(formatShellParseError(line, root))
+    }
+    const nodes = root.namedChildren.filter((node) => !node.isExtra).map(convertShellNode)
+    if (nodes.length === 0) {
+      return null
+    }
+    return nodes.length === 1 ? nodes[0] : { type: 'sequence', nodes }
+  } finally {
+    tree.delete()
   }
 }
 
@@ -1444,7 +1457,7 @@ async function runSimpleCommand(words: string[], stdin: string): Promise<Runtime
     }
   }
 
-  if (UUTILS_COMMAND_SET.has(command)) {
+  if (UUTILS_COMMAND_SET.has(command) && !BUILTIN_COMMAND_SET.has(command)) {
     return await runWasiTool(command, resolveWasiArgs(command, args), stdin, state.cwd)
   }
 
@@ -2393,12 +2406,10 @@ async function builtinPython(args: string[], stdin: string): Promise<RuntimeComm
 
 async function handleShellLine(line: string): Promise<RuntimeCommandResult> {
   const expanded = expandAlias(line)
-  const normalized = await normalizeShellSyntax(expanded)
-  const tokens = tokenize(normalized)
-  if (tokens.length === 0) {
+  const ast = await parseShellAst(expanded)
+  if (!ast) {
     return { stdout: '', stderr: '', status: 0 }
   }
-  const ast = parseSequence(tokens)
   return await executeAst(ast)
 }
 
