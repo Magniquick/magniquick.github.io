@@ -1,24 +1,24 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
-
+/* Palette is sourced entirely from @catppuccin/palette (Mocha flavor).
+   Do not introduce hand-picked hex values here — alias from --ctp-mocha-* only. */
 :root {
   color-scheme: dark;
 
-  --bg:          #0a0a0b;
-  --bg-soft:     #111113;
-  --bg-softer:   #15151a;
-  --fg:          #f2f2f3;
-  --muted:       #76767d;
-  --muted-soft: #35353b;
-  --border:      #1f1f24;
-  --border-hi:   #2c2c34;
-  --accent:      #a5a5ff;
-  --accent-dim:  #5353a8;
-  --ok:          #6ee7a7;
-  --warn:        #f5c57b;
-  --err:         #ff8a8a;
+  --bg:          var(--ctp-mocha-base);
+  --bg-soft:     var(--ctp-mocha-mantle);
+  --bg-softer:   var(--ctp-mocha-crust);
+  --fg:          var(--ctp-mocha-text);
+  --muted:       var(--ctp-mocha-subtext0);
+  --muted-soft:  var(--ctp-mocha-overlay0);
+  --border:      var(--ctp-mocha-surface0);
+  --border-hi:   var(--ctp-mocha-surface1);
+  --accent:      var(--ctp-mocha-lavender);
+  --accent-dim:  var(--ctp-mocha-mauve);
+  --ok:          var(--ctp-mocha-green);
+  --warn:        var(--ctp-mocha-peach);
+  --err:         var(--ctp-mocha-red);
 
-  --terminal-bg: #0d0d10;
-  --terminal-fg: #e6e6e8;
+  --terminal-bg: var(--ctp-mocha-crust);
+  --terminal-fg: var(--ctp-mocha-text);
 
   --radius-sm: 6px;
   --radius:    10px;
@@ -47,8 +47,8 @@ body {
   font-size: 14px;
   line-height: 1.55;
   background:
-    radial-gradient(1100px 520px at 82% -15%, rgb(165 165 255 / 0.06), transparent 62%),
-    radial-gradient(800px 400px at -10% 120%, rgb(110 231 167 / 0.035), transparent 60%),
+    radial-gradient(1100px 520px at 82% -15%, rgb(var(--ctp-mocha-lavender-rgb) / 0.06), transparent 62%),
+    radial-gradient(800px 400px at -10% 120%, rgb(var(--ctp-mocha-green-rgb) / 0.035), transparent 60%),
     var(--bg);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -112,7 +112,7 @@ input {
   color: var(--accent);
   margin-right: 0.4em;
   transform: translateY(-0.04em);
-  text-shadow: 0 0 24px rgb(165 165 255 / 0.35);
+  text-shadow: 0 0 24px rgb(var(--ctp-mocha-lavender-rgb) / 0.35);
 }
 
 .strap {
@@ -148,7 +148,7 @@ input {
   height: 7px;
   border-radius: 999px;
   background: var(--muted);
-  box-shadow: 0 0 0 3px rgb(255 255 255 / 0.02), 0 0 12px currentColor;
+  box-shadow: 0 0 0 3px rgb(var(--ctp-mocha-subtext1-rgb) / 0.04), 0 0 12px currentColor;
   color: var(--muted);
   animation: pulse 2.4s ease-in-out infinite;
 }
@@ -190,9 +190,9 @@ input {
   background: var(--terminal-bg);
   overflow: hidden;
   box-shadow:
-    0 1px 0 rgb(255 255 255 / 0.03) inset,
-    0 24px 60px -30px rgb(0 0 0 / 0.6),
-    0 2px 12px -4px rgb(0 0 0 / 0.4);
+    0 1px 0 rgb(var(--ctp-mocha-subtext1-rgb) / 0.04) inset,
+    0 24px 60px -30px rgb(var(--ctp-mocha-crust-rgb) / 0.75),
+    0 2px 12px -4px rgb(var(--ctp-mocha-crust-rgb) / 0.5);
 }
 
 /* soft hairline highlight on the top edge, like a light catching glass */
@@ -204,8 +204,8 @@ input {
   background: linear-gradient(
     90deg,
     transparent,
-    rgb(165 165 255 / 0.28) 20%,
-    rgb(165 165 255 / 0.28) 80%,
+    rgb(var(--ctp-mocha-lavender-rgb) / 0.28) 20%,
+    rgb(var(--ctp-mocha-lavender-rgb) / 0.28) 80%,
     transparent
   );
   pointer-events: none;
@@ -216,7 +216,7 @@ input {
   --terminal-pad-x: 1.5rem;
   --terminal-pad-bottom: 1.5rem;
   --terminal-scrollbar-offset: calc(-1 * var(--terminal-pad-x) + 4px);
-  min-height: 68vh;
+  min-height: clamp(420px, 68vh, 820px);
   background: transparent;
   overflow: hidden;
 }
@@ -313,7 +313,7 @@ input {
 .actions button.active {
   border-color: var(--accent);
   color: var(--accent);
-  background: rgb(165 165 255 / 0.06);
+  background: rgb(var(--ctp-mocha-lavender-rgb) / 0.06);
 }
 
 .actions .num {
@@ -376,7 +376,7 @@ input {
 
 .search-row button:hover {
   color: var(--accent);
-  background: rgb(165 165 255 / 0.08);
+  background: rgb(var(--ctp-mocha-lavender-rgb) / 0.08);
 }
 
 /* ── colophon ─────────────────────────────────────────────── */
