@@ -1,7 +1,15 @@
 /// <reference lib="webworker" />
 
 import { flavors } from '@catppuccin/palette'
-import { toJsonObject, type JSONOutput as CurlRequest } from 'curlconverter/dist/src/generators/json.js'
+import { buildRequests, getFirst } from 'curlconverter/dist/src/Request.js'
+import {
+  curlLongOpts,
+  curlLongOptsShortened,
+  curlShortOpts,
+  parseArgs,
+} from 'curlconverter/dist/src/curl/opts.js'
+import { Word } from 'curlconverter/dist/src/shell/Word.js'
+import type { Warnings } from 'curlconverter/dist/src/Warnings.js'
 import type { PyodideAPI } from 'pyodide'
 import { Directory, File } from '@bjorn3/browser_wasi_shim'
 import { Language, Parser, type Node as TreeSitterNode } from 'web-tree-sitter'
@@ -10,6 +18,7 @@ import bashWasmUrl from 'tree-sitter-bash/tree-sitter-bash.wasm?url'
 import { runJokeCommand } from './jokeCommands'
 import { runWasiTool } from './wasiTools'
 import * as fsState from './fsState'
+import { CURL_SUPPORTED_ARGS } from './generated/curlMetadata'
 import { UUTILS_COMMANDS } from './generated/uutilsMetadata'
 import { featuredProjects, projectArchive } from './data/projects'
 import { profile } from './data/profile'
@@ -22,6 +31,19 @@ type RuntimeCommandResult = {
   stderr: string
   status: number
   clear?: boolean
+}
+
+type CurlRequest = {
+  url: string
+  method: string
+  headers?: Record<string, string | null>
+  data?: unknown
+  include?: boolean
+  auth?: { user: string; password: string }
+  follow_redirects?: boolean
+  timeout?: number
+  connect_timeout?: number
+  output?: string
 }
 
 type CommandNode = {
@@ -42,12 +64,17 @@ type LogicalNode = {
   right: AstNode
 }
 
+type ArithmeticNode = {
+  type: 'arithmetic'
+  expression: string
+}
+
 type SequenceNode = {
   type: 'sequence'
   nodes: AstNode[]
 }
 
-type AstNode = PipelineNode | LogicalNode | SequenceNode
+type AstNode = PipelineNode | LogicalNode | ArithmeticNode | SequenceNode
 
 type ShellState = {
   cwd: string
@@ -108,6 +135,7 @@ function wrapWords(words: readonly string[], width = 76) {
 
 const HELP_TEXT = `shell builtins
 
+bc [FILE...]
 cd <path>
 tree [path]
 less <file>
@@ -499,7 +527,7 @@ function walkPaths(path: string): string[] {
 }
 
 const BUILTIN_COMMANDS = [
-  'alias', 'cd', 'clear', 'curl', 'env', 'export', 'getconf', 'grep', 'help', 'history', 'hostname', 'jq',
+  'alias', 'bc', 'cd', 'clear', 'curl', 'env', 'export', 'getconf', 'grep', 'help', 'history', 'hostname', 'jq',
   'jsh', 'kill', 'less', 'neofetch', 'printenv', 'ps', 'pwd', 'python', 'tree', 'unset', 'uptime', 'which', 'xxd',
   'nix', 'apt', 'brew', 'yum', 'miku', 'sudo', 'su', 'pacman', 'starwars',
 ]
@@ -507,6 +535,7 @@ const BUILTIN_COMMAND_SET = new Set<string>(BUILTIN_COMMANDS)
 const UUTILS_COMMAND_SET = new Set<string>(UUTILS_COMMANDS)
 const ALL_COMMANDS = [...BUILTIN_COMMANDS, ...UUTILS_COMMANDS].sort((left, right) => left.localeCompare(right))
 const COMPLETABLE_COMMANDS = ALL_COMMANDS
+const CURL_SUPPORTED_ARG_SET = new Set<string>(CURL_SUPPORTED_ARGS)
 
 function commonPrefix(values: string[]) {
   if (values.length === 0) {
@@ -1074,6 +1103,14 @@ function convertShellCommand(command: TreeSitterNode): CommandNode {
   }
 }
 
+function arithmeticExpressionFromCompound(node: TreeSitterNode) {
+  const text = node.text.trim()
+  if (!text.startsWith('((') || !text.endsWith('))')) {
+    return null
+  }
+  return text.slice(2, -2).trim()
+}
+
 function convertShellNode(node: TreeSitterNode): AstNode {
   if (node.type === 'command') {
     return {
@@ -1100,6 +1137,13 @@ function convertShellNode(node: TreeSitterNode): AstNode {
       throw new Error('unsupported redirection without command')
     }
     return appendRedirections(node, convertShellNode(body))
+  }
+
+  if (node.type === 'compound_statement') {
+    const expression = arithmeticExpressionFromCompound(node)
+    if (expression !== null) {
+      return { type: 'arithmetic', expression }
+    }
   }
 
   if (node.type === 'list') {
@@ -1218,6 +1262,22 @@ function expandGlobs(word: string) {
   return matches.length > 0 ? matches : [word]
 }
 
+function evaluateArithmeticExpression(expression: string, opts: { integer?: boolean } = {}): number {
+  const withVariables = expression.replace(/\b[A-Za-z_][A-Za-z0-9_]*\b/g, (name) => {
+    const value = Number.parseInt(state.env[name] ?? '0', 10)
+    return Number.isFinite(value) ? String(value) : '0'
+  })
+  if (!/^[\d\s()+\-*/%<>=!&|^~?:.,]+$/.test(withVariables)) {
+    throw new Error(`unsupported arithmetic expression: ${expression}`)
+  }
+  // Bash arithmetic and JavaScript share the operators this shell accepts here.
+  const result = Function(`"use strict"; return Number((${withVariables}))`)()
+  if (typeof result !== 'number' || Number.isNaN(result)) {
+    return 0
+  }
+  return opts.integer ? Math.trunc(result) : result
+}
+
 async function executeAst(node: AstNode, stdin = ''): Promise<RuntimeCommandResult> {
   if (node.type === 'sequence') {
     let result: RuntimeCommandResult = { stdout: '', stderr: '', status: 0 }
@@ -1234,6 +1294,15 @@ async function executeAst(node: AstNode, stdin = ''): Promise<RuntimeCommandResu
       }
     }
     return { stdout: '', stderr: '', status: result.status }
+  }
+
+  if (node.type === 'arithmetic') {
+    try {
+      return { stdout: '', stderr: '', status: evaluateArithmeticExpression(node.expression, { integer: true }) === 0 ? 1 : 0 }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      return { stdout: '', stderr: `${message}\n`, status: 1 }
+    }
   }
 
   if (node.type === 'logical') {
@@ -1377,6 +1446,8 @@ async function runSimpleCommand(words: string[], stdin: string): Promise<Runtime
       return { stdout: `${state.cwd}\n`, stderr: '', status: 0 }
     case 'cd':
       return builtinCd(args)
+    case 'bc':
+      return builtinBc(args, stdin)
     case 'tree':
       return builtinTree(args)
     case 'less':
@@ -1473,6 +1544,59 @@ function builtinCd(args: string[]): RuntimeCommandResult {
     state.env.PWD = resolvePath(target, '/')
   }
   return { stdout: requested === '-' ? `${target}\n` : '', stderr: '', status: 0 }
+}
+
+function formatBcNumber(value: number) {
+  if (!Number.isFinite(value)) {
+    return String(value)
+  }
+  if (Object.is(value, -0)) {
+    return '0'
+  }
+  return Number.isInteger(value) ? String(value) : String(Number(value.toPrecision(12)))
+}
+
+function runBcSource(source: string) {
+  const output: string[] = []
+  for (const rawLine of source.split('\n')) {
+    const line = rawLine.trim()
+    if (!line || line.startsWith('#')) {
+      continue
+    }
+    for (const expression of line.split(';').map((part) => part.trim()).filter(Boolean)) {
+      if (/^[A-Za-z_][A-Za-z0-9_]*\s*=/.test(expression)) {
+        continue
+      }
+      output.push(formatBcNumber(evaluateArithmeticExpression(expression)))
+    }
+  }
+  return output
+}
+
+function builtinBc(args: string[], stdin: string): RuntimeCommandResult {
+  const operands: string[] = []
+  for (const arg of args) {
+    if (arg === '-q' || arg === '-l') {
+      continue
+    }
+    if (arg.startsWith('-')) {
+      return { stdout: '', stderr: `bc: unsupported option ${arg}\n`, status: 1 }
+    }
+    operands.push(arg)
+  }
+
+  const { inputs, error } = readCommandInput(operands, stdin, 'bc')
+  if (error) {
+    return error
+  }
+
+  try {
+    const lines = inputs.flatMap((input) => runBcSource(input.text))
+    return { stdout: lines.length > 0 ? `${lines.join('\n')}\n` : '', stderr: '', status: 0 }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return { stdout: '', stderr: `bc: ${message}\n`, status: 1 }
+  }
 }
 
 function builtinTree(args: string[]): RuntimeCommandResult {
@@ -1953,7 +2077,45 @@ function builtinJq(args: string[], stdin: string): RuntimeCommandResult {
 
 async function builtinCurl(args: string[], _stdin: string): Promise<RuntimeCommandResult> {
   try {
-    const request = toJsonObject(['curl', ...args]) as CurlRequest
+    const warnings: Warnings = []
+    const argv = ['curl', ...args].map((arg) => new Word(arg))
+    const [globalConfig] = parseArgs(argv, curlLongOpts, curlLongOptsShortened, curlShortOpts, CURL_SUPPORTED_ARG_SET, warnings)
+    const parsedRequests = buildRequests(globalConfig)
+    const requestConfig = getFirst(parsedRequests, warnings)
+    const requestUrl = requestConfig.urls[0]
+    const request: CurlRequest = {
+      url: requestUrl.url.toString().replace(/\/$/, ''),
+      method: requestUrl.method.toString().toLowerCase(),
+    }
+    if (requestConfig.headers.length) {
+      request.headers = Object.fromEntries(
+        requestConfig.headers.headers
+          .filter((header) => header[1] !== null)
+          .map((header) => [header[0].toString(), header[1]?.toString() ?? null]),
+      )
+    }
+    if (requestConfig.data) {
+      request.data = requestConfig.data.toString()
+    }
+    if (requestConfig.include) {
+      request.include = true
+    }
+    if (requestUrl.auth) {
+      request.auth = { user: requestUrl.auth[0].toString(), password: requestUrl.auth[1].toString() }
+    }
+    if (Object.prototype.hasOwnProperty.call(requestConfig, 'followRedirects')) {
+      request.follow_redirects = requestConfig.followRedirects
+    }
+    if (requestConfig.timeout) {
+      request.timeout = Number.parseFloat(requestConfig.timeout.toString())
+    }
+    if (requestConfig.connectTimeout) {
+      request.connect_timeout = Number.parseFloat(requestConfig.connectTimeout.toString())
+    }
+    if (requestUrl.output) {
+      request.output = requestUrl.output.toString()
+    }
+
     if (!request.url) {
       return { stdout: '', stderr: 'curl: no URL specified\n', status: 2 }
     }

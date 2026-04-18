@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "generate": "bun run generate:starwars && bun run generate:uutils",
+    "generate": "bun run generate:starwars && bun run generate:uutils && bun run generate:curl",
+    "generate:curl": "bun scripts/generate-curl-metadata.mjs",
     "generate:uutils": "bun scripts/generate-uutils-metadata.mjs",
     "generate:starwars": "bun scripts/generate-starwars-animation.mjs",
     "predev": "bun run generate",

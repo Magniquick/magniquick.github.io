@@ -257,6 +257,12 @@ test('runtime lab boots and executes shared shell/python commands', async ({ pag
   await sendCommand(page, 'echo \'{"name":"magni"}\' | jq -r .name')
   await expect.poll(async () => await readTerminalBuffer(page)).toContain('magni')
 
+  await sendCommand(page, '((1+1)) && echo arithmetic-ok')
+  await expect.poll(async () => await readTerminalBuffer(page)).toContain('arithmetic-ok')
+
+  await sendCommand(page, 'echo "1+1" | bc')
+  await expect.poll(async () => await readTerminalBuffer(page)).toContain('2')
+
   await sendCommand(page, 'echo hi | xxd')
   await expect.poll(async () => await readTerminalBuffer(page)).toContain('00000000:')
 

@@ -2,7 +2,6 @@ import { defineConfig } from 'vite'
 import { sveltekit } from '@sveltejs/kit/vite'
 
 const emptyNodeModule = new URL('./src/shims/node-empty.ts', import.meta.url).pathname
-const curlconverterParserStub = new URL('./src/shims/curlconverter-parser-stub.ts', import.meta.url).pathname
 const nodeOnlyModules = [
   'fs/promises',
   'module',
@@ -18,13 +17,9 @@ const nodeOnlyModules = [
 export default defineConfig({
   plugins: [sveltekit()],
   resolve: {
-    alias: [
-      {
-        find: './Parser.js',
-        replacement: curlconverterParserStub,
-      },
-      ...nodeOnlyModules.map((id) => ({ find: id, replacement: emptyNodeModule })),
-    ],
+    alias: {
+      ...Object.fromEntries(nodeOnlyModules.map((id) => [id, emptyNodeModule])),
+    },
   },
   optimizeDeps: {
     exclude: ['pyodide'],
