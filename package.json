@@ -6,14 +6,14 @@
   "scripts": {
     "generate:starwars": "bun scripts/generate-starwars-animation.mjs",
     "predev": "bun run generate:starwars",
-    "dev": "vite dev",
+    "dev": "bun --bun vite dev",
     "prebuild": "bun run generate:starwars",
-    "build": "svelte-kit sync && vite build",
-    "preview": "vite preview",
+    "build": "bun --bun svelte-kit sync && bun --bun vite build",
+    "preview": "bun --bun vite preview",
     "precheck": "bun run generate:starwars",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "check": "bun --bun svelte-kit sync && bun --bun svelte-check --tsconfig ./tsconfig.json",
     "pretest:smoke": "bun run generate:starwars",
-    "test:smoke": "playwright test"
+    "test:smoke": "bun --bun playwright test"
   },
   "dependencies": {
     "@bjorn3/browser_wasi_shim": "^0.4.2",
