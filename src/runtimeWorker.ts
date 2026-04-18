@@ -3,6 +3,8 @@
 import { flavors } from '@catppuccin/palette'
 import type { PyodideAPI } from 'pyodide'
 import { Directory, File } from '@bjorn3/browser_wasi_shim'
+import { getProcessor, LangVariant } from 'sh-syntax'
+import initShellSyntaxWasm from 'sh-syntax/main.wasm?init'
 import { runJokeCommand } from './jokeCommands'
 import { runWasiTool } from './wasiTools'
 import * as fsState from './fsState'
@@ -18,6 +20,8 @@ import { profile } from './data/profile'
 import type { RuntimeEvent, RuntimeRequest, ShellMode } from './runtimeProtocol'
 
 declare const self: DedicatedWorkerGlobalScope
+
+const shellSyntax = getProcessor(initShellSyntaxWasm)
 
 type RuntimeCommandResult = {
   stdout: string
@@ -1038,6 +1042,16 @@ function expandAlias(line: string) {
     seen.add(first)
     expanded = `${state.aliases[first]}${trimmed.slice(first.length)}`
   }
+}
+
+async function normalizeShellSyntax(line: string) {
+  const normalized = await shellSyntax(line, {
+    print: true,
+    singleLine: true,
+    keepComments: false,
+    variant: LangVariant.LangBash,
+  })
+  return normalized.trim()
 }
 
 function parseCommand(tokens: Token[], startIndex: number) {
@@ -2379,7 +2393,8 @@ async function builtinPython(args: string[], stdin: string): Promise<RuntimeComm
 
 async function handleShellLine(line: string): Promise<RuntimeCommandResult> {
   const expanded = expandAlias(line)
-  const tokens = tokenize(expanded)
+  const normalized = await normalizeShellSyntax(expanded)
+  const tokens = tokenize(normalized)
   if (tokens.length === 0) {
     return { stdout: '', stderr: '', status: 0 }
   }

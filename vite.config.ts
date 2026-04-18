@@ -3,6 +3,9 @@ import { sveltekit } from '@sveltejs/kit/vite'
 
 const emptyNodeModule = new URL('./src/shims/node-empty.ts', import.meta.url).pathname
 const nodeOnlyModules = [
+  'crypto',
+  'fs',
+  'util',
   'node:child_process',
   'node:crypto',
   'node:fs/promises',
