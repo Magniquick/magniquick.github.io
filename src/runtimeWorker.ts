@@ -1465,6 +1465,7 @@ async function executeAst(node: AstNode, stdin = ''): Promise<RuntimeCommandResu
     pipeInput = lastResult.stdout
     if (lastResult.stderr && node.commands.length > 1) {
       writeStderr(lastResult.stderr)
+      lastResult = { ...lastResult, stderr: '' }
     }
     if (lastResult.status !== 0) {
       break

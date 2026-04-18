@@ -163,6 +163,23 @@
           brightCyan: readThemeToken('--ctp-mocha-teal'),
           brightWhite: readThemeToken('--ctp-mocha-subtext1'),
         },
+        linkHandler: {
+          activate(event, uri) {
+            event.preventDefault()
+            try {
+              const url = new URL(uri)
+              if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+                return
+              }
+              const trusted = url.hostname === 'xkcd.com' || url.hostname.endsWith('.xkcd.com')
+              if (trusted || window.confirm(`Open ${uri}?`)) {
+                window.open(uri, '_blank', 'noopener,noreferrer')
+              }
+            } catch {
+              // ignore invalid links
+            }
+          },
+        },
       })
 
       fitAddon = new FitAddon()
