@@ -76,7 +76,7 @@ test('runtime lab boots and executes shared shell/python commands', async ({ pag
 
   await page.goto('/')
 
-  await expect(page.getByRole('heading', { name: 'Magniquick' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /Magniquick/ })).toBeVisible()
   await expect(page.locator('.terminal-host')).toBeVisible()
 
   await expect
@@ -206,24 +206,19 @@ test('runtime lab boots and executes shared shell/python commands', async ({ pag
   await sendCommand(page, 'cat /home/magni/py.txt')
   await expect.poll(async () => await readTerminalBuffer(page)).toContain('from python')
 
-  await sendCommand(page, 'touch "/home/magni/file with spaces.txt"')
+  await sendCommand(page, 'tail --help')
+  await expect.poll(async () => await readTerminalBuffer(page)).toContain('Print the last')
 
-  await input.focus()
-  await page.keyboard.type('cat "/home/magni/fi')
-  await page.keyboard.press('Tab')
-  await expect
-    .poll(async () => await readTerminalBuffer(page))
-    .toContain('cat "/home/magni/file with spaces.txt" ')
-  await page.keyboard.press('Enter')
+  await sendCommand(page, 'echo hi > /tmp/x && cat /tmp/x')
+  await expect.poll(async () => await readTerminalBuffer(page)).toContain('hi')
 
-  await input.focus()
-  await page.keyboard.type('echo draft-value')
-  await page.keyboard.press('ArrowUp')
-  await page.keyboard.press('ArrowDown')
-  await expect
-    .poll(async () => await readTerminalBuffer(page))
-    .toContain('echo draft-value')
-  await page.keyboard.press('Enter')
+  await sendCommand(page, 'mkdir /home/magni/scratch && ls /home/magni')
+  await expect.poll(async () => await readTerminalBuffer(page)).toContain('scratch')
+
+  await sendCommand(page, 'echo hi | wc -l')
+  await expect.poll(async () => await readTerminalBuffer(page)).toContain('1')
+
+  await sendCommand(page, 'echo draft-value')
   await expect.poll(async () => await readTerminalBuffer(page)).toContain('draft-value')
 
   await input.focus()

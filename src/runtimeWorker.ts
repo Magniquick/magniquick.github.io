@@ -2,23 +2,15 @@
 
 import { flavors } from '@catppuccin/palette'
 import type { PyodideAPI } from 'pyodide'
+import { Directory, File } from '@bjorn3/browser_wasi_shim'
 import { runJokeCommand } from './jokeCommands'
 import { runWasiTool } from './wasiTools'
+import * as fsState from './fsState'
 import { featuredProjects, projectArchive } from './data/projects'
 import { profile } from './data/profile'
 import type { RuntimeEvent, RuntimeRequest, ShellMode } from './runtimeProtocol'
 
 declare const self: DedicatedWorkerGlobalScope
-
-type SnapshotEntry =
-  | { type: 'dir'; mtime?: number }
-  | {
-      type: 'file'
-      data: string
-      mtime?: number
-    }
-
-type HomeSnapshot = Record<string, SnapshotEntry>
 
 type RuntimeCommandResult = {
   stdout: string
@@ -74,15 +66,11 @@ type ShellState = {
   rows: number
 }
 
-const DB_NAME = 'magniquick-lab'
-const STORE_NAME = 'snapshots'
-const SNAPSHOT_KEY = 'home'
 const HOME_ROOT = '/home/magni'
 const HISTORY_FILE = `${HOME_ROOT}/.jsh_history`
 const USERNAME = 'magni'
 const DEFAULT_PROMPT_USER = 'magniquick'
 const DEFAULT_HOSTNAME = 'lab'
-const PERSISTENCE_LIMIT = 5 * 1024 * 1024
 const BOOT_TIME = Date.now()
 const MOCHA = flavors.mocha.colors
 
@@ -161,12 +149,10 @@ operators
 
 let pyodide: PyodideAPI | null = null
 let ready = false
-let lastSyncedHome: HomeSnapshot = {}
 let pendingStdIn: string[] = []
 let interruptBuffer: Int32Array | null = null
 let activeCapture: { stdout: string; stderr: string } | null = null
 let pyodideBootPromise: Promise<PyodideAPI> | null = null
-let vfs: Record<string, SnapshotEntry> = {}
 let lastExitCode = 0
 let interruptSerial = 0
 
@@ -247,115 +233,12 @@ function writeStderr(data: string) {
   }
 }
 
-async function openDb() {
-  return await new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1)
-    request.onupgradeneeded = () => {
-      const db = request.result
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME)
-      }
-    }
-    request.onerror = () => reject(request.error)
-    request.onsuccess = () => resolve(request.result)
-  })
-}
-
-async function loadSnapshotFromDb() {
-  const db = await openDb()
-  return await new Promise<HomeSnapshot>((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readonly')
-    const store = tx.objectStore(STORE_NAME)
-    const request = store.get(SNAPSHOT_KEY)
-    request.onerror = () => reject(request.error)
-    request.onsuccess = () => {
-      resolve((request.result as HomeSnapshot | undefined) ?? {})
-    }
-  })
-}
-
-async function saveSnapshotToDb(snapshot: HomeSnapshot) {
-  const db = await openDb()
-  return await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readwrite')
-    const store = tx.objectStore(STORE_NAME)
-    const request = store.put(snapshot, SNAPSHOT_KEY)
-    request.onerror = () => reject(request.error)
-    tx.onerror = () => reject(tx.error)
-    tx.oncomplete = () => resolve()
-  })
-}
-
-function encodeBase64(bytes: Uint8Array) {
-  let binary = ''
-  const chunkSize = 0x8000
-  for (let index = 0; index < bytes.length; index += chunkSize) {
-    const slice = bytes.subarray(index, index + chunkSize)
-    binary += String.fromCharCode(...slice)
-  }
-  return btoa(binary)
-}
-
-function decodeBase64(value: string) {
-  const binary = atob(value)
-  const bytes = new Uint8Array(binary.length)
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index)
-  }
-  return bytes
-}
-
 function stripAnsi(value: string) {
   return value.replace(/\u001b\[[0-9;]*m/g, '')
 }
 
 function visibleWidth(value: string) {
   return stripAnsi(value).length
-}
-
-function fsExists(path: string) {
-  return Boolean(vfs[path])
-}
-
-function nowTimestamp() {
-  return Date.now()
-}
-
-function entryMtime(path: string) {
-  return vfs[path]?.mtime ?? 0
-}
-
-function touchMtime(path: string) {
-  const entry = vfs[path]
-  if (entry) {
-    entry.mtime = nowTimestamp()
-  }
-}
-
-function fsIsDir(path: string) {
-  return vfs[path]?.type === 'dir'
-}
-
-function fsIsFile(path: string) {
-  return vfs[path]?.type === 'file'
-}
-
-function fsMkdirTree(path: string) {
-  const target = resolvePath(path, '/')
-  if (target === '/') {
-    vfs['/'] = { type: 'dir', mtime: vfs['/']?.mtime ?? nowTimestamp() }
-    return
-  }
-
-  const segments = target.split('/').filter(Boolean)
-  let current = ''
-  vfs['/'] = { type: 'dir', mtime: vfs['/']?.mtime ?? nowTimestamp() }
-  for (const segment of segments) {
-    current = `${current}/${segment}`
-    if (!vfs[current]) {
-      vfs[current] = { type: 'dir', mtime: nowTimestamp() }
-    }
-  }
 }
 
 function resolvePath(input: string, cwd = state.cwd) {
@@ -393,100 +276,8 @@ function basename(path: string) {
   return parts.at(-1) ?? path
 }
 
-function readTextFile(path: string) {
-  const entry = vfs[path]
-  if (!entry || entry.type !== 'file') {
-    throw new Error(`${path}: no such file`)
-  }
-  return new TextDecoder().decode(decodeBase64(entry.data))
-}
-
-function writeTextFile(path: string, contents: string) {
-  fsMkdirTree(dirname(path))
-  const data = new TextEncoder().encode(contents)
-  vfs[path] = { type: 'file', data: encodeBase64(data), mtime: nowTimestamp() }
-  touchMtime(dirname(path))
-}
-
-function removePath(path: string, recursive = false) {
-  if (fsIsDir(path)) {
-    const entries = listDirectory(path)
-    if (entries.length > 0 && !recursive) {
-      throw new Error(`rm: ${path}: is a directory`)
-    }
-    for (const entry of entries) {
-      removePath(resolvePath(entry, path), true)
-    }
-    delete vfs[path]
-    touchMtime(dirname(path))
-    return
-  }
-  delete vfs[path]
-  touchMtime(dirname(path))
-}
-
-function copyPath(src: string, dst: string) {
-  const entry = vfs[src]
-  if (!entry || entry.type !== 'file') {
-    throw new Error(`cp: ${src}: only file copies are supported in v1`)
-  }
-  fsMkdirTree(dirname(dst))
-  vfs[dst] = { type: 'file', data: entry.data, mtime: nowTimestamp() }
-  touchMtime(dirname(dst))
-}
-
-function movePath(src: string, dst: string) {
-  const entry = vfs[src]
-  if (!entry) {
-    throw new Error(`mv: ${src}: no such file or directory`)
-  }
-
-  if (entry.type === 'file') {
-    fsMkdirTree(dirname(dst))
-    vfs[dst] = entry
-    delete vfs[src]
-    touchMtime(dirname(dst))
-    touchMtime(dirname(src))
-    return
-  }
-
-  const movedEntries = Object.entries(vfs).filter(([path]) => path === src || path.startsWith(`${src}/`))
-  fsMkdirTree(dst)
-  for (const [path, childEntry] of movedEntries) {
-    const nextPath = path === src ? dst : `${dst}${path.slice(src.length)}`
-    vfs[nextPath] = childEntry
-    if (path !== nextPath) {
-      delete vfs[path]
-    }
-  }
-  touchMtime(dirname(dst))
-  touchMtime(dirname(src))
-}
-
-function listDirectory(path: string) {
-  const prefix = path === '/' ? '/' : `${path}/`
-  const entries = new Set<string>()
-
-  for (const key of Object.keys(vfs)) {
-    if (key === path || !key.startsWith(prefix)) {
-      continue
-    }
-    const remainder = key.slice(prefix.length)
-    const [first] = remainder.split('/')
-    if (first) {
-      entries.add(first)
-    }
-  }
-
-  return [...entries].sort()
-}
-
 function fileSize(path: string) {
-  const entry = vfs[path]
-  if (!entry || entry.type !== 'file') {
-    return 0
-  }
-  return decodeBase64(entry.data).byteLength
+  return fsState.getFileBytes(path)?.byteLength ?? 0
 }
 
 function formatSize(bytes: number, humanReadable: boolean) {
@@ -516,7 +307,7 @@ function formatBlocks(path: string) {
 }
 
 function formatLsTime(path: string, full = false) {
-  const timestamp = entryMtime(path)
+  const timestamp = fsState.mtime(path)
   if (!timestamp) {
     return full ? '1970-01-01 00:00' : 'Jan 01 00:00'
   }
@@ -550,7 +341,7 @@ function colorizeLsName(name: string, path: string) {
   if (name === '.' || name === '..') {
     return paint(name, ANSI.blue)
   }
-  if (fsIsDir(path)) {
+  if (fsState.isDir(path)) {
     return paint(name, ANSI.blue)
   }
   return paint(name, ANSI.text)
@@ -682,16 +473,16 @@ function escapeRegex(input: string) {
 }
 
 function walkPaths(path: string): string[] {
-  if (!fsExists(path)) {
+  if (!fsState.exists(path)) {
     return []
   }
-  if (fsIsFile(path)) {
+  if (fsState.isFile(path)) {
     return [path]
   }
   const files: string[] = []
-  for (const entry of listDirectory(path)) {
+  for (const entry of fsState.listDir(path) ?? []) {
     const child = resolvePath(entry, path)
-    if (fsIsDir(child)) {
+    if (fsState.isDir(child)) {
       files.push(...walkPaths(child))
     } else {
       files.push(child)
@@ -703,9 +494,8 @@ function walkPaths(path: string): string[] {
 const BUILTIN_COMMANDS = [
   'alias', 'cat', 'cd', 'chmod', 'clear', 'cp', 'curl', 'echo', 'env', 'false', 'getconf', 'grep', 'head',
   'help', 'history', 'hostname', 'jq', 'jsh', 'kill', 'less', 'ln', 'ls', 'mkdir', 'mv', 'neofetch', 'printenv',
-  'ps', 'pwd', 'python', 'rm', 'rmdir', 'sort', 'tail', 'touch', 'tree', 'true', 'unset', 'uptime', 'which', 'xxd',
+  'ps', 'pwd', 'python', 'rm', 'rmdir', 'sort', 'tail', 'touch', 'tree', 'true', 'unset', 'uptime', 'wc', 'which', 'xxd',
   'export', 'nix', 'apt', 'brew', 'yum', 'miku', 'sudo', 'su', 'pacman', 'starwars',
-  'wls', 'wcat', 'wwc', 'wsort', 'whead', 'wtail',
 ]
 const COMPLETABLE_COMMANDS = BUILTIN_COMMANDS
 
@@ -731,7 +521,7 @@ function completePathToken(
   const resolved = resolvePath(normalizedToken || '.', state.cwd)
   const parent = normalizedToken.endsWith('/') ? resolved : dirname(resolved)
   const base = normalizedToken.endsWith('/') ? '' : basename(resolved)
-  if (!fsExists(parent) || !fsIsDir(parent)) {
+  if (!fsState.exists(parent) || !fsState.isDir(parent)) {
     return null
   }
 
@@ -753,11 +543,11 @@ function completePathToken(
         ? normalizedToken
         : normalizedToken.slice(0, Math.max(0, normalizedToken.length - base.length))
 
-  const matches = listDirectory(parent)
+  const matches = (fsState.listDir(parent) ?? [])
     .filter((name) => name.startsWith(base))
-    .filter((name) => !directoriesOnly || fsIsDir(resolvePath(name, parent)))
+    .filter((name) => !directoriesOnly || fsState.isDir(resolvePath(name, parent)))
     .map((name) => {
-      const suffix = fsIsDir(resolvePath(name, parent)) ? '/' : ''
+      const suffix = fsState.isDir(resolvePath(name, parent)) ? '/' : ''
       return `${typedPrefix}${name}${suffix}`
     })
   if (matches.length === 0) {
@@ -846,13 +636,13 @@ function readCommandInput(args: string[], stdin: string, commandName: string) {
       continue
     }
     const target = resolvePath(arg)
-    if (!fsExists(target) || !fsIsFile(target)) {
+    if (!fsState.exists(target) || !fsState.isFile(target)) {
       return {
         inputs: [],
         error: { stdout: '', stderr: `${commandName}: ${target}: no such file\n`, status: 1 } as RuntimeCommandResult,
       }
     }
-    inputs.push({ label: target, text: readTextFile(target) })
+    inputs.push({ label: target, text: fsState.getFileText(target) ?? '' })
   }
   return { inputs, error: null as RuntimeCommandResult | null }
 }
@@ -861,83 +651,27 @@ function maybeReadStdin(stdin: string) {
   return stdin.length > 0 ? stdin : ''
 }
 
-function snapshotHome(): HomeSnapshot {
-  const snapshot: HomeSnapshot = { '.': { type: 'dir' } }
-  for (const [path, entry] of Object.entries(vfs)) {
-    if (path !== HOME_ROOT && !path.startsWith(`${HOME_ROOT}/`)) {
-      continue
-    }
-    const relativePath = path === HOME_ROOT ? '' : path.slice(HOME_ROOT.length + 1)
-    if (!relativePath) {
-      continue
-    }
-    snapshot[relativePath] = entry
-  }
-  return snapshot
-}
-
-function restoreHome(snapshot: HomeSnapshot) {
-  for (const [relativePath, entry] of Object.entries(snapshot)) {
-    const targetPath = relativePath ? resolvePath(relativePath, HOME_ROOT) : HOME_ROOT
-    if (entry.type === 'dir') {
-      fsMkdirTree(targetPath)
-      continue
-    }
-    fsMkdirTree(dirname(targetPath))
-    vfs[targetPath] = entry
-  }
-}
-
-function deltaSizeBytes(previous: HomeSnapshot, next: HomeSnapshot) {
-  const encoder = new TextEncoder()
-  const keys = new Set([...Object.keys(previous), ...Object.keys(next)])
-  let total = 0
-
-  for (const key of keys) {
-    const before = previous[key]
-    const after = next[key]
-    const beforeSerialized = before ? JSON.stringify(before) : ''
-    const afterSerialized = after ? JSON.stringify(after) : ''
-    if (beforeSerialized === afterSerialized) {
-      continue
-    }
-    total += encoder.encode(key).byteLength
-    total += encoder.encode(afterSerialized || beforeSerialized).byteLength
-  }
-
-  return total
-}
-
 async function persistHomeIfAllowed() {
-  const next = snapshotHome()
-  const deltaBytes = deltaSizeBytes(lastSyncedHome, next)
-  if (deltaBytes > PERSISTENCE_LIMIT) {
-    post({
-      type: 'fs-warning',
-      message: `persistence skipped: changed data under ${HOME_ROOT} is ${(deltaBytes / (1024 * 1024)).toFixed(2)} MB`,
-    })
-    return
-  }
-  await saveSnapshotToDb(next)
-  lastSyncedHome = next
+  await fsState.saveToDb()
 }
 
 function seedHome() {
-  vfs = {}
-  fsMkdirTree('/')
-  fsMkdirTree('/bin')
-  fsMkdirTree('/tmp')
-  fsMkdirTree('/home')
-  fsMkdirTree(HOME_ROOT)
+  fsState.root.contents.clear()
+  fsState.touch('/')
+  fsState.mkdirp('/')
+  fsState.mkdirp('/bin')
+  fsState.mkdirp('/tmp')
+  fsState.mkdirp('/home')
+  fsState.mkdirp(HOME_ROOT)
 
   for (const command of BUILTIN_COMMANDS) {
-    writeTextFile(
+    fsState.putFileText(
       `/bin/${command}`,
       `#!/bin/jsh-lite\n# builtin: ${command}\n`,
     )
   }
 
-  writeTextFile(
+  fsState.putFileText(
     `${HOME_ROOT}/README.txt`,
     `${profile.handle}
 ${profile.fullName}
@@ -948,45 +682,45 @@ ${profile.summary}
 `,
   )
 
-  writeTextFile(
+  fsState.putFileText(
     `${HOME_ROOT}/PROJECTS.txt`,
     projectArchive
       .map((project) => `${project.name}  ${project.language}  *${project.stars}\n${project.description}`)
       .join('\n\n'),
   )
 
-  writeTextFile(
+  fsState.putFileText(
     `${HOME_ROOT}/FEATURED.txt`,
     featuredProjects
       .map((project) => `${project.name}\n${project.description}\n${project.reason}`)
       .join('\n\n'),
   )
 
-  writeTextFile(
+  fsState.putFileText(
     `${HOME_ROOT}/welcome.py`,
     `print("Magniquick lab")\nprint("Filesystem root:", "${HOME_ROOT}")\n`,
   )
 
-  writeTextFile(HISTORY_FILE, '')
+  fsState.putFileText(HISTORY_FILE, '')
 }
 
 function loadHistoryFromFile() {
-  if (!fsExists(HISTORY_FILE) || !fsIsFile(HISTORY_FILE)) {
-    writeTextFile(HISTORY_FILE, '')
+  if (!fsState.exists(HISTORY_FILE) || !fsState.isFile(HISTORY_FILE)) {
+    fsState.putFileText(HISTORY_FILE, '')
     state.history = []
     return
   }
 
-  const contents = readTextFile(HISTORY_FILE)
+  const contents = fsState.getFileText(HISTORY_FILE) ?? ''
   state.history = contents
     .split('\n')
     .filter((entry) => entry.length > 0)
 }
 
 function appendHistoryEntry(line: string) {
-  const existing = fsExists(HISTORY_FILE) && fsIsFile(HISTORY_FILE) ? readTextFile(HISTORY_FILE) : ''
+  const existing = fsState.exists(HISTORY_FILE) && fsState.isFile(HISTORY_FILE) ? fsState.getFileText(HISTORY_FILE) ?? '' : ''
   const suffix = existing.length === 0 || existing.endsWith('\n') ? '' : '\n'
-  writeTextFile(HISTORY_FILE, `${existing}${suffix}${line}\n`)
+  fsState.putFileText(HISTORY_FILE, `${existing}${suffix}${line}\n`)
   state.history.push(line)
 }
 
@@ -1012,7 +746,7 @@ function clearPyodidePath(path: string) {
   }
 }
 
-function syncVfsToPyodide() {
+function syncTreeToPyodide() {
   if (!pyodide) {
     return
   }
@@ -1022,62 +756,62 @@ function syncVfsToPyodide() {
   clearPyodidePath('/home')
 
   const FS = pyodide.FS
-  const sortedEntries = Object.entries(vfs).sort(([left], [right]) => left.localeCompare(right))
-  for (const [path, entry] of sortedEntries) {
+  for (const { path, inode } of fsState.walk('/')) {
     if (path === '/') {
       continue
     }
-    if (entry.type === 'dir') {
+    if (inode instanceof Directory) {
       FS.mkdirTree(path)
       continue
     }
+    if (!(inode instanceof File)) {
+      continue
+    }
     FS.mkdirTree(dirname(path))
-    FS.writeFile(path, decodeBase64(entry.data))
+    FS.writeFile(path, inode.data)
   }
 }
 
-function syncPyodideTreeToVfs(path: string) {
+function syncPyodideTreeToFsState(path: string) {
   if (!pyodide) {
     return
   }
   const FS = pyodide.FS
   const stat = FS.stat(path)
   if (FS.isDir(stat.mode)) {
-    vfs[path] = { type: 'dir' }
+    fsState.mkdirp(path)
     for (const entry of FS.readdir(path).filter((name: string) => name !== '.' && name !== '..')) {
-      syncPyodideTreeToVfs(resolvePath(entry, path))
+      syncPyodideTreeToFsState(resolvePath(entry, path))
     }
     return
   }
   const data = FS.readFile(path) as Uint8Array
-  vfs[path] = { type: 'file', data: encodeBase64(data) }
+  fsState.putFile(path, data)
 }
 
-function syncPyodideToVfs() {
+function syncPyodideToFsState() {
   if (!pyodide) {
     return
   }
 
-  for (const path of Object.keys(vfs)) {
-    if (path.startsWith('/home/') || path === '/home' || path.startsWith('/tmp/') || path === '/tmp' || path.startsWith('/bin/') || path === '/bin') {
-      delete vfs[path]
-    }
-  }
-  fsMkdirTree('/')
-  syncPyodideTreeToVfs('/bin')
-  syncPyodideTreeToVfs('/tmp')
-  syncPyodideTreeToVfs('/home')
+  fsState.remove('/bin', { recursive: true })
+  fsState.remove('/tmp', { recursive: true })
+  fsState.remove('/home', { recursive: true })
+  fsState.mkdirp('/')
+  syncPyodideTreeToFsState('/bin')
+  syncPyodideTreeToFsState('/tmp')
+  syncPyodideTreeToFsState('/home')
 }
 
 async function bootstrapPython() {
   if (pyodide) {
-    syncVfsToPyodide()
+    syncTreeToPyodide()
     return pyodide
   }
 
   if (pyodideBootPromise) {
     await pyodideBootPromise
-    syncVfsToPyodide()
+    syncTreeToPyodide()
     if (!pyodide) {
       throw new Error('Python runtime failed to initialize')
     }
@@ -1115,7 +849,7 @@ async function bootstrapPython() {
       pyodide.setInterruptBuffer(interruptBuffer)
     }
 
-    syncVfsToPyodide()
+    syncTreeToPyodide()
 
     await pyodide.runPythonAsync(`
 import code
@@ -1411,11 +1145,11 @@ function expandGlobs(word: string) {
   const parentPath = dirname(targetPath)
   const pattern = basename(targetPath)
 
-  if (!fsExists(parentPath) || !fsIsDir(parentPath)) {
+  if (!fsState.exists(parentPath) || !fsState.isDir(parentPath)) {
     return [word]
   }
 
-  const matches = listDirectory(parentPath)
+  const matches = (fsState.listDir(parentPath) ?? [])
     .filter((entry) => matchesGlob(entry, pattern))
     .map((entry) => {
       const fullPath = resolvePath(entry, parentPath)
@@ -1486,10 +1220,10 @@ async function executeCommand(command: CommandNode, stdin: string): Promise<Runt
   let input = stdin
   for (const redirect of redirections) {
     if (redirect.op === '<') {
-      if (!fsExists(redirect.target)) {
+      if (!fsState.exists(redirect.target)) {
         return { stdout: '', stderr: `<: ${redirect.target}: no such file\n`, status: 1 }
       }
-      input = readTextFile(redirect.target)
+      input = fsState.getFileText(redirect.target) ?? ''
     }
   }
 
@@ -1511,15 +1245,17 @@ async function executeCommand(command: CommandNode, stdin: string): Promise<Runt
     stderr: `${result.stderr}${buffered?.stderr ?? ''}`,
   }
 
+  let wroteRedirect = false
   for (const redirect of redirections) {
     if (redirect.op === '>' || redirect.op === '>>') {
-      const previous = redirect.op === '>>' && fsExists(redirect.target) ? readTextFile(redirect.target) : ''
-      writeTextFile(redirect.target, `${previous}${result.stdout}`)
+      const previous = redirect.op === '>>' && fsState.exists(redirect.target) ? fsState.getFileText(redirect.target) ?? '' : ''
+      fsState.putFileText(redirect.target, `${previous}${result.stdout}`)
       result = { ...result, stdout: '' }
+      wroteRedirect = true
     }
   }
 
-  if (result.status === 0 && didMutateFilesystem(expandedWords)) {
+  if (result.status === 0 && (wroteRedirect || didMutateFilesystem(expandedWords))) {
     await persistHomeIfAllowed()
   }
 
@@ -1559,6 +1295,50 @@ function unwrapEnvCommand(words: string[]) {
   return 'env'
 }
 
+function resolveWasiArgs(command: string, args: string[]) {
+  if (command === 'echo' || command === 'true' || command === 'false') {
+    return args
+  }
+
+  const resolved: string[] = []
+  let skipNext = false
+  let seenChmodMode = false
+
+  for (const arg of args) {
+    if (skipNext) {
+      resolved.push(arg)
+      skipNext = false
+      continue
+    }
+
+    if ((command === 'head' || command === 'tail') && (arg === '-n' || arg === '--lines' || arg === '-c' || arg === '--bytes')) {
+      resolved.push(arg)
+      skipNext = true
+      continue
+    }
+
+    if (arg === '--') {
+      resolved.push(arg)
+      continue
+    }
+
+    if (arg === '-' || (arg.startsWith('-') && arg !== '-')) {
+      resolved.push(arg)
+      continue
+    }
+
+    if (command === 'chmod' && !seenChmodMode) {
+      resolved.push(arg)
+      seenChmodMode = true
+      continue
+    }
+
+    resolved.push(resolvePath(arg))
+  }
+
+  return resolved
+}
+
 async function runSimpleCommand(words: string[], stdin: string): Promise<RuntimeCommandResult> {
   if (words.length === 0) {
     return { stdout: '', stderr: '', status: 0 }
@@ -1585,37 +1365,29 @@ async function runSimpleCommand(words: string[], stdin: string): Promise<Runtime
     case 'cd':
       return builtinCd(args)
     case 'ls':
-      return builtinLs(args)
-    case 'wls':
-    case 'wwc':
-    case 'wcat':
-    case 'wsort':
-    case 'whead':
-    case 'wtail': {
-      const toolName = command.slice(1)
-      const resolved = command === 'wls' && args.length === 0 ? [state.cwd] : args
-      return await runWasiTool(toolName, resolved, stdin, state.cwd, vfs)
-    }
+    case 'cat':
+    case 'wc':
+    case 'head':
+    case 'tail':
+    case 'sort':
+    case 'mkdir':
+    case 'touch':
+    case 'rm':
+    case 'rmdir':
+    case 'cp':
+    case 'mv':
+    case 'ln':
+    case 'chmod':
+    case 'echo':
+    case 'true':
+    case 'false':
+      return await runWasiTool(command, resolveWasiArgs(command, args), stdin, state.cwd)
     case 'tree':
       return builtinTree(args)
-    case 'mkdir':
-      return builtinMkdir(args)
-    case 'touch':
-      return builtinTouch(args)
-    case 'cat':
-      return builtinCat(args, stdin)
     case 'less':
       return builtinLess(args, stdin)
-    case 'echo':
-      return builtinEcho(args)
     case 'grep':
       return builtinGrep(args, stdin)
-    case 'head':
-      return builtinHead(args, stdin)
-    case 'tail':
-      return builtinTail(args, stdin)
-    case 'sort':
-      return builtinSort(args, stdin)
     case 'which':
       return builtinWhich(args)
     case 'hostname':
@@ -1624,18 +1396,8 @@ async function runSimpleCommand(words: string[], stdin: string): Promise<Runtime
       return builtinUptime()
     case 'neofetch':
       return builtinNeofetch()
-    case 'true':
-      return { stdout: '', stderr: '', status: 0 }
-    case 'false':
-      return { stdout: '', stderr: '', status: 1 }
     case 'getconf':
       return builtinGetconf(args)
-    case 'rmdir':
-      return builtinRmdir(args)
-    case 'chmod':
-      return builtinChmod(args)
-    case 'ln':
-      return builtinLn(args)
     case 'xxd':
       return builtinXxd(args, stdin)
     case 'jq':
@@ -1656,12 +1418,6 @@ async function runSimpleCommand(words: string[], stdin: string): Promise<Runtime
       return builtinExport(args)
     case 'unset':
       return builtinUnset(args)
-    case 'rm':
-      return builtinRm(args)
-    case 'cp':
-      return builtinCp(args)
-    case 'mv':
-      return builtinMv(args)
     case 'clear':
       return { stdout: '', stderr: '', status: 0, clear: true }
     case 'help':
@@ -1711,7 +1467,7 @@ function builtinCd(args: string[]): RuntimeCommandResult {
 
   const requested = operands[0] ?? HOME_ROOT
   const target = requested === '-' ? state.env.OLDPWD || HOME_ROOT : resolvePath(requested ?? HOME_ROOT)
-  if (!fsExists(target) || !fsIsDir(target)) {
+  if (!fsState.exists(target) || !fsState.isDir(target)) {
     return { stdout: '', stderr: `cd: ${target}: no such directory\n`, status: 1 }
   }
   const previous = state.cwd
@@ -1722,311 +1478,6 @@ function builtinCd(args: string[]): RuntimeCommandResult {
     state.env.PWD = resolvePath(target, '/')
   }
   return { stdout: requested === '-' ? `${target}\n` : '', stderr: '', status: 0 }
-}
-
-function builtinLs(args: string[]): RuntimeCommandResult {
-  let showAll = false
-  let almostAll = false
-  let longFormat = false
-  let humanReadable = false
-  let showDirectory = false
-  let classify = false
-  let appendSlash = false
-  let showInode = false
-  let numericIds = false
-  let recursive = false
-  let reverse = false
-  let sortBySize = false
-  let sortByTime = false
-  let sortByExtension = false
-  let versionSort = false
-  let showBlocks = false
-  let fullTime = false
-  let singleColumn = false
-  let commaSeparated = false
-  const targets: string[] = []
-
-  let stopFlags = false
-  for (const arg of args) {
-    if (!stopFlags && arg === '--') {
-      stopFlags = true
-      continue
-    }
-    if (!stopFlags && arg.startsWith('-') && arg !== '-') {
-      for (const flag of arg.slice(1)) {
-        if (flag === 'a') {
-          showAll = true
-          continue
-        }
-        if (flag === 'A') {
-          almostAll = true
-          continue
-        }
-        if (flag === 'l') {
-          longFormat = true
-          commaSeparated = false
-          singleColumn = true
-          continue
-        }
-        if (flag === 'h') {
-          humanReadable = true
-          continue
-        }
-        if (flag === 'd') {
-          showDirectory = true
-          continue
-        }
-        if (flag === 'F') {
-          classify = true
-          continue
-        }
-        if (flag === 'p') {
-          appendSlash = true
-          continue
-        }
-        if (flag === 'i') {
-          showInode = true
-          continue
-        }
-        if (flag === 'n') {
-          numericIds = true
-          continue
-        }
-        if (flag === 'R') {
-          recursive = true
-          continue
-        }
-        if (flag === 'r') {
-          reverse = true
-          continue
-        }
-        if (flag === 'S') {
-          sortBySize = true
-          sortByTime = false
-          sortByExtension = false
-          versionSort = false
-          continue
-        }
-        if (flag === 't') {
-          sortByTime = true
-          sortBySize = false
-          sortByExtension = false
-          versionSort = false
-          continue
-        }
-        if (flag === 'X') {
-          sortByExtension = true
-          sortBySize = false
-          sortByTime = false
-          versionSort = false
-          continue
-        }
-        if (flag === 'v') {
-          versionSort = true
-          sortByExtension = false
-          sortBySize = false
-          sortByTime = false
-          continue
-        }
-        if (flag === '1') {
-          singleColumn = true
-          commaSeparated = false
-          continue
-        }
-        if (flag === 'm') {
-          commaSeparated = true
-          singleColumn = false
-          longFormat = false
-          continue
-        }
-        if (flag === 's') {
-          showBlocks = true
-          continue
-        }
-        if (flag === 'e') {
-          fullTime = true
-          continue
-        }
-        return { stdout: '', stderr: `ls: invalid option -- ${flag}\n`, status: 1 }
-      }
-      continue
-    }
-    targets.push(arg)
-  }
-
-  const resolvedTargets = (targets.length > 0 ? targets : ['.']).map((target) => resolvePath(target))
-  const sections: string[] = []
-
-  const decorateName = (name: string, path: string) => {
-    let value = name
-    if (classify && fsIsDir(path)) {
-      value += '/'
-    } else if (appendSlash && fsIsDir(path)) {
-      value += '/'
-    }
-    if (name !== '.' && name !== '..' && name.includes(' ')) {
-      value = `"${value}"`
-    }
-    return colorizeLsName(value, path)
-  }
-
-  const renderLongLine = (name: string, path: string) => {
-    const isDir = fsIsDir(path)
-    const size = isDir ? 0 : fileSize(path)
-    const owner = numericIds
-      ? `${paint('1000', ANSI.yellow)} ${paint('1000', ANSI.yellow)}`
-      : `${paint(state.env.USER, ANSI.yellow)} ${paint(state.env.USER, ANSI.yellow)}`
-    const prefix = [
-      showInode ? paint(String(stableInode(path)), ANSI.dim) : null,
-      showBlocks ? paint(formatBlocks(path), ANSI.dim) : null,
-      paint(`${isDir ? 'drwxr-xr-x' : '-rw-r--r--'}  1`, ANSI.text),
-      owner,
-      paint(formatSize(size, humanReadable), ANSI.green),
-      paint(formatLsTime(path, fullTime), ANSI.text),
-      decorateName(name, path),
-    ]
-      .filter(Boolean)
-      .join(' ')
-    return prefix
-  }
-
-  const renderFlatLines = (names: string[]) => {
-    if (commaSeparated) {
-      return names.join(', ')
-    }
-    if (singleColumn) {
-      return names.join('\n')
-    }
-
-    if (names.length === 0) {
-      return ''
-    }
-
-    const gap = 2
-    const maxWidth = Math.max(...names.map((name) => visibleWidth(name)))
-    const colWidth = maxWidth + gap
-    const terminalWidth = Math.max(20, state.cols)
-    if (colWidth >= terminalWidth) {
-      return names.join('\n')
-    }
-    const columnCount = Math.max(1, Math.floor((terminalWidth + gap) / colWidth))
-    const rowCount = Math.ceil(names.length / columnCount)
-    const rows: string[] = []
-
-    for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
-      const row: string[] = []
-      for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
-        const entryIndex = columnIndex * rowCount + rowIndex
-        if (entryIndex >= names.length) {
-          continue
-        }
-        const value = names[entryIndex]
-        const isLastColumn = columnIndex === columnCount - 1 || entryIndex + rowCount >= names.length
-        row.push(isLastColumn ? value : `${value}${' '.repeat(colWidth - visibleWidth(value))}`)
-      }
-      rows.push(row.join(''))
-    }
-
-    return rows.join('\n')
-  }
-
-  const sortEntries = (entries: Array<{ name: string; path: string }>) => {
-    entries.sort((left, right) => {
-      if (sortBySize) {
-        const sizeDiff = fileSize(right.path) - fileSize(left.path)
-        if (sizeDiff !== 0) {
-          return sizeDiff
-        }
-      }
-      if (sortByTime) {
-        const timeDiff = entryMtime(right.path) - entryMtime(left.path)
-        if (timeDiff !== 0) {
-          return timeDiff
-        }
-      }
-      if (sortByExtension) {
-        const leftExt = left.name.includes('.') ? left.name.split('.').at(-1) ?? '' : ''
-        const rightExt = right.name.includes('.') ? right.name.split('.').at(-1) ?? '' : ''
-        const extCompare = compareNames(leftExt, rightExt, versionSort)
-        if (extCompare !== 0) {
-          return extCompare
-        }
-      }
-      return compareNames(left.name, right.name, versionSort)
-    })
-    if (reverse) {
-      entries.reverse()
-    }
-    return entries
-  }
-
-  const renderDirectory = (target: string, includeHeading = false) => {
-    const rawEntries = listDirectory(target).map((name) => ({ name, path: resolvePath(name, target) }))
-    const visibleEntries = sortEntries(
-      rawEntries.filter(({ name }) => showAll || almostAll || !name.startsWith('.')),
-    )
-
-    const names: Array<{ name: string; path: string }> = []
-    if (showAll) {
-      names.push({ name: '.', path: target }, { name: '..', path: dirname(target) })
-    }
-    names.push(...visibleEntries)
-
-    const lines = longFormat
-      ? names.map(({ name, path }) => renderLongLine(name, path))
-      : names.map(({ name, path }) => {
-          const decorated = decorateName(name, path)
-          const prefix = [
-            showInode ? paint(String(stableInode(path)), ANSI.dim) : null,
-            showBlocks ? paint(formatBlocks(path), ANSI.dim) : null,
-          ]
-            .filter(Boolean)
-            .join(' ')
-          return prefix ? `${prefix} ${decorated}` : decorated
-        })
-
-    if (includeHeading) {
-      sections.push(`${target}:`)
-    }
-    sections.push(renderFlatLines(lines))
-
-    if (recursive) {
-      for (const entry of visibleEntries.filter(({ path }) => fsIsDir(path))) {
-        sections.push('')
-        renderDirectory(entry.path, true)
-      }
-    }
-  }
-
-  for (const [index, target] of resolvedTargets.entries()) {
-    if (!fsExists(target)) {
-      return { stdout: '', stderr: `ls: ${target}: no such file or directory\n`, status: 1 }
-    }
-
-    if (fsIsFile(target) || showDirectory) {
-      const displayName = basename(target)
-      const line = longFormat
-        ? renderLongLine(displayName, target)
-        : [
-            showInode ? String(stableInode(target)) : null,
-            showBlocks ? formatBlocks(target) : null,
-            decorateName(displayName, target),
-          ]
-            .filter(Boolean)
-            .join(' ')
-      if (resolvedTargets.length > 1) {
-        sections.push(`${target}:`)
-      }
-      sections.push(line)
-    } else {
-      renderDirectory(target, resolvedTargets.length > 1)
-    }
-    if (index < resolvedTargets.length - 1) {
-      sections.push('')
-    }
-  }
-
-  return { stdout: `${sections.join('\n')}\n`, stderr: '', status: 0 }
 }
 
 function builtinTree(args: string[]): RuntimeCommandResult {
@@ -2053,7 +1504,7 @@ function builtinTree(args: string[]): RuntimeCommandResult {
   }
 
   const target = resolvePath(targets[0] ?? '.')
-  if (!fsExists(target)) {
+  if (!fsState.exists(target)) {
     return { stdout: '', stderr: `tree: ${target}: No such file or directory\n`, status: 1 }
   }
 
@@ -2066,9 +1517,9 @@ function builtinTree(args: string[]): RuntimeCommandResult {
     const branch = prefix ? `${prefix}${isLast ? '└── ' : '├── '}` : ''
     lines.push(`${branch}${colorizeLsName(name, path)}`)
 
-    if (fsIsDir(path)) {
+    if (fsState.isDir(path)) {
       directoryCount += 1
-      const childEntries = listDirectory(path)
+      const childEntries = (fsState.listDir(path) ?? [])
         .filter((entry) => showAll || !entry.startsWith('.'))
         .map((entry) => resolvePath(entry, path))
         .sort((left, right) => compareNames(basename(left), basename(right), false))
@@ -2083,7 +1534,7 @@ function builtinTree(args: string[]): RuntimeCommandResult {
     fileCount += 1
   }
 
-  if (fsIsDir(target)) {
+  if (fsState.isDir(target)) {
     renderNode(target, '', true)
   } else {
     lines.push(colorizeLsName(basename(target), target))
@@ -2094,163 +1545,6 @@ function builtinTree(args: string[]): RuntimeCommandResult {
   lines.push(`${directoryCount} director${directoryCount === 1 ? 'y' : 'ies'}, ${fileCount} file${fileCount === 1 ? '' : 's'}`)
 
   return { stdout: `${lines.join('\n')}\n`, stderr: '', status: 0 }
-}
-
-function builtinMkdir(args: string[]): RuntimeCommandResult {
-  if (args.length === 0) {
-    return { stdout: '', stderr: 'mkdir: missing operand\n', status: 1 }
-  }
-  for (const arg of args) {
-    fsMkdirTree(resolvePath(arg))
-  }
-  return { stdout: '', stderr: '', status: 0 }
-}
-
-function builtinTouch(args: string[]): RuntimeCommandResult {
-  if (args.length === 0) {
-    return { stdout: '', stderr: 'touch: missing operand\n', status: 1 }
-  }
-  for (const arg of args) {
-    const target = resolvePath(arg)
-    if (!fsExists(target)) {
-      writeTextFile(target, '')
-      continue
-    }
-    if (fsIsFile(target)) {
-      const current = readTextFile(target)
-      writeTextFile(target, current)
-    }
-  }
-  return { stdout: '', stderr: '', status: 0 }
-}
-
-function builtinCat(args: string[], stdin: string): RuntimeCommandResult {
-  let numberAll = false
-  let numberNonBlank = false
-  let showNonPrinting = false
-  let showEnds = false
-  let showTabs = false
-  const targets: string[] = []
-  let stopFlags = false
-
-  for (const arg of args) {
-    if (!stopFlags && arg === '--') {
-      stopFlags = true
-      continue
-    }
-    if (!stopFlags && arg.startsWith('-') && arg !== '-') {
-      for (const flag of arg.slice(1)) {
-        if (flag === 'A') {
-          showNonPrinting = true
-          showEnds = true
-          showTabs = true
-          continue
-        }
-        if (flag === 'b') {
-          numberNonBlank = true
-          continue
-        }
-        if (flag === 'e') {
-          showNonPrinting = true
-          showEnds = true
-          continue
-        }
-        if (flag === 'n') {
-          numberAll = true
-          continue
-        }
-        if (flag === 't') {
-          showNonPrinting = true
-          showTabs = true
-          continue
-        }
-        if (flag === 'u' || flag === 'v') {
-          if (flag === 'v') {
-            showNonPrinting = true
-          }
-          continue
-        }
-        return { stdout: '', stderr: `cat: invalid option -- ${flag}\n`, status: 1 }
-      }
-      continue
-    }
-    targets.push(arg)
-  }
-
-  const sources = targets.length === 0 ? ['-'] : targets
-  const chunks: string[] = []
-  let lineNumber = 1
-  let stderr = ''
-  let status = 0
-
-  for (const arg of sources) {
-    let text = ''
-    if (arg === '-') {
-      text = stdin
-    } else {
-      const target = resolvePath(arg)
-      if (!fsExists(target) || !fsIsFile(target)) {
-        stderr += `cat: ${target}: no such file\n`
-        status = 1
-        continue
-      }
-      text = readTextFile(target)
-    }
-
-    const lines = text.split(/(?<=\n)|(?<!\n)$/)
-    for (const rawLine of lines) {
-      if (!rawLine) {
-        continue
-      }
-      const hasTrailingNewline = rawLine.endsWith('\n')
-      const lineBody = hasTrailingNewline ? rawLine.slice(0, -1) : rawLine
-      const visualized = visualizeCatText(lineBody, { showNonPrinting, showEnds, showTabs })
-      const shouldNumber = numberNonBlank ? lineBody.length > 0 : numberAll || numberNonBlank
-      const prefix = shouldNumber ? `${String(lineNumber).padStart(6, ' ')}  ` : ''
-      if (shouldNumber) {
-        lineNumber += 1
-      } else if (numberAll) {
-        lineNumber += 1
-      }
-      chunks.push(`${prefix}${visualized}${hasTrailingNewline ? '\n' : ''}`)
-    }
-  }
-
-  return { stdout: chunks.join(''), stderr, status }
-}
-
-function builtinEcho(args: string[]): RuntimeCommandResult {
-  let interpretEscapes = false
-  let trailingNewline = true
-  let index = 0
-
-  while (index < args.length) {
-    const arg = args[index]
-    if (!/^-[eEn]+$/.test(arg)) {
-      break
-    }
-    for (const flag of arg.slice(1)) {
-      if (flag === 'e') {
-        interpretEscapes = true
-      } else if (flag === 'E') {
-        interpretEscapes = false
-      } else if (flag === 'n') {
-        trailingNewline = false
-      }
-    }
-    index += 1
-  }
-
-  let output = args.slice(index).join(' ')
-  if (interpretEscapes) {
-    const parsed = parseEchoEscapes(output)
-    output = parsed.output
-    if (parsed.suppressNewline) {
-      trailingNewline = false
-    }
-  }
-
-  return { stdout: `${output}${trailingNewline ? '\n' : ''}`, stderr: '', status: 0 }
 }
 
 function builtinGrep(args: string[], stdin: string): RuntimeCommandResult {
@@ -2291,11 +1585,11 @@ function builtinGrep(args: string[], stdin: string): RuntimeCommandResult {
           patterns.push(value)
         } else if (arg === '-f') {
           const path = resolvePath(value)
-          if (!fsExists(path) || !fsIsFile(path)) {
+          if (!fsState.exists(path) || !fsState.isFile(path)) {
             return { stdout: '', stderr: `grep: ${path}: no such file\n`, status: 2 }
           }
           patterns.push(
-            ...readTextFile(path)
+            ...(fsState.getFileText(path) ?? '')
               .split('\n')
               .filter(Boolean),
           )
@@ -2346,11 +1640,11 @@ function builtinGrep(args: string[], stdin: string): RuntimeCommandResult {
             patterns.push(value)
           } else {
             const path = resolvePath(value)
-            if (!fsExists(path) || !fsIsFile(path)) {
+            if (!fsState.exists(path) || !fsState.isFile(path)) {
               return { stdout: '', stderr: `grep: ${path}: no such file\n`, status: 2 }
             }
             patterns.push(
-              ...readTextFile(path)
+              ...(fsState.getFileText(path) ?? '')
                 .split('\n')
                 .filter(Boolean),
             )
@@ -2385,13 +1679,13 @@ function builtinGrep(args: string[], stdin: string): RuntimeCommandResult {
   } else {
     for (const rawTarget of targets) {
       const target = resolvePath(rawTarget)
-      if (!fsExists(target)) {
+      if (!fsState.exists(target)) {
         if (!suppressErrors) {
           return { stdout: '', stderr: `grep: ${target}: no such file or directory\n`, status: 2 }
         }
         continue
       }
-      if (fsIsDir(target)) {
+      if (fsState.isDir(target)) {
         if (!recursive) {
           if (!suppressErrors) {
             return { stdout: '', stderr: `grep: ${target}: Is a directory\n`, status: 2 }
@@ -2399,11 +1693,11 @@ function builtinGrep(args: string[], stdin: string): RuntimeCommandResult {
           continue
         }
         for (const file of walkPaths(target)) {
-          inputs.push({ label: file, text: readTextFile(file) })
+          inputs.push({ label: file, text: fsState.getFileText(file) ?? '' })
         }
         continue
       }
-      inputs.push({ label: target, text: readTextFile(target) })
+      inputs.push({ label: target, text: fsState.getFileText(target) ?? '' })
     }
   }
 
@@ -2480,120 +1774,6 @@ function builtinGrep(args: string[], stdin: string): RuntimeCommandResult {
   }
 
   return { stdout: output.length > 0 ? `${output.join('\n')}\n` : '', stderr: '', status: hadMatch ? 0 : 1 }
-}
-
-function parseCountOption(command: string, args: string[], defaultCount: number) {
-  let count = defaultCount
-  const operands: string[] = []
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index]
-    if (arg === '-n' || arg === '--lines') {
-      const value = args[index + 1]
-      if (!value) {
-        return { count: 0, operands: [] as string[], error: { stdout: '', stderr: `${command}: option requires an argument -- n\n`, status: 1 } as RuntimeCommandResult }
-      }
-      count = Number.parseInt(value, 10)
-      index += 1
-      continue
-    }
-    if (arg.startsWith('-n') && arg.length > 2) {
-      count = Number.parseInt(arg.slice(2), 10)
-      continue
-    }
-    if (/^-\d+$/.test(arg)) {
-      count = Number.parseInt(arg.slice(1), 10)
-      continue
-    }
-    operands.push(arg)
-  }
-  if (!Number.isFinite(count) || count < 0) {
-    return { count: 0, operands: [] as string[], error: { stdout: '', stderr: `${command}: invalid number of lines\n`, status: 1 } as RuntimeCommandResult }
-  }
-  return { count, operands, error: null as RuntimeCommandResult | null }
-}
-
-function builtinHead(args: string[], stdin: string): RuntimeCommandResult {
-  const parsed = parseCountOption('head', args, 10)
-  if (parsed.error) {
-    return parsed.error
-  }
-  const { inputs, error } = readCommandInput(parsed.operands, stdin, 'head')
-  if (error) {
-    return error
-  }
-  const chunks: string[] = []
-  inputs.forEach((input, index) => {
-    const lines = input.text.split('\n').slice(0, parsed.count)
-    if (inputs.length > 1) {
-      chunks.push(`==> ${input.label} <==`)
-    }
-    chunks.push(lines.join('\n'))
-    if (index < inputs.length - 1) {
-      chunks.push('')
-    }
-  })
-  return { stdout: `${chunks.join('\n')}${chunks.length > 0 ? '\n' : ''}`, stderr: '', status: 0 }
-}
-
-function builtinTail(args: string[], stdin: string): RuntimeCommandResult {
-  const parsed = parseCountOption('tail', args, 10)
-  if (parsed.error) {
-    return parsed.error
-  }
-  const { inputs, error } = readCommandInput(parsed.operands, stdin, 'tail')
-  if (error) {
-    return error
-  }
-  const chunks: string[] = []
-  inputs.forEach((input, index) => {
-    const lines = input.text.split('\n')
-    const selected = lines.slice(Math.max(0, lines.length - parsed.count))
-    if (inputs.length > 1) {
-      chunks.push(`==> ${input.label} <==`)
-    }
-    chunks.push(selected.join('\n'))
-    if (index < inputs.length - 1) {
-      chunks.push('')
-    }
-  })
-  return { stdout: `${chunks.join('\n')}${chunks.length > 0 ? '\n' : ''}`, stderr: '', status: 0 }
-}
-
-function builtinSort(args: string[], stdin: string): RuntimeCommandResult {
-  let numeric = false
-  let reverse = false
-  let unique = false
-  let ignoreCase = false
-  const files: string[] = []
-  for (const arg of args) {
-    if (arg.startsWith('-') && arg !== '-') {
-      for (const flag of arg.slice(1)) {
-        if (flag === 'n') numeric = true
-        else if (flag === 'r') reverse = true
-        else if (flag === 'u') unique = true
-        else if (flag === 'f') ignoreCase = true
-        else return { stdout: '', stderr: `sort: invalid option -- ${flag}\n`, status: 1 }
-      }
-      continue
-    }
-    files.push(arg)
-  }
-  const { inputs, error } = readCommandInput(files, stdin, 'sort')
-  if (error) {
-    return error
-  }
-  const lines = inputs.flatMap((input) => input.text.split('\n').filter((line, index, array) => !(index === array.length - 1 && line === '')))
-  lines.sort((left, right) => {
-    if (numeric) {
-      return Number.parseFloat(left) - Number.parseFloat(right)
-    }
-    return left.localeCompare(right, undefined, { sensitivity: ignoreCase ? 'accent' : 'variant' })
-  })
-  if (reverse) {
-    lines.reverse()
-  }
-  const finalLines = unique ? lines.filter((line, index) => index === 0 || line !== lines[index - 1]) : lines
-  return { stdout: `${finalLines.join('\n')}${finalLines.length > 0 ? '\n' : ''}`, stderr: '', status: 0 }
 }
 
 function builtinWhich(args: string[]): RuntimeCommandResult {
@@ -2697,80 +1877,15 @@ function builtinGetconf(args: string[]): RuntimeCommandResult {
   return { stdout: `${table[key]}\n`, stderr: '', status: 0 }
 }
 
-function builtinRmdir(args: string[]): RuntimeCommandResult {
-  if (args.length === 0) {
-    return { stdout: '', stderr: 'rmdir: missing operand\n', status: 1 }
-  }
-  for (const arg of args) {
-    const target = resolvePath(arg)
-    if (!fsExists(target) || !fsIsDir(target)) {
-      return { stdout: '', stderr: `rmdir: failed to remove '${target}': No such directory\n`, status: 1 }
-    }
-    if (listDirectory(target).length > 0) {
-      return { stdout: '', stderr: `rmdir: failed to remove '${target}': Directory not empty\n`, status: 1 }
-    }
-    delete vfs[target]
-    touchMtime(dirname(target))
-  }
-  return { stdout: '', stderr: '', status: 0 }
-}
-
-function builtinChmod(args: string[]): RuntimeCommandResult {
-  if (args.length < 2) {
-    return { stdout: '', stderr: 'chmod: missing operand\n', status: 1 }
-  }
-  const mode = args[0]
-  if (!/^[0-7]{3,4}$/.test(mode) && !/^[ugoa]+[+=-][rwx]+$/.test(mode)) {
-    return { stdout: '', stderr: `chmod: invalid mode: '${mode}'\n`, status: 1 }
-  }
-  for (const rawTarget of args.slice(1)) {
-    const target = resolvePath(rawTarget)
-    if (!fsExists(target)) {
-      return { stdout: '', stderr: `chmod: cannot access '${target}': No such file or directory\n`, status: 1 }
-    }
-    touchMtime(target)
-  }
-  return { stdout: '', stderr: '', status: 0 }
-}
-
-function builtinLn(args: string[]): RuntimeCommandResult {
-  let symbolic = false
-  const operands: string[] = []
-  for (const arg of args) {
-    if (arg === '-s') {
-      symbolic = true
-      continue
-    }
-    if (arg.startsWith('-') && arg !== '-') {
-      return { stdout: '', stderr: `ln: invalid option -- ${arg.slice(1)}\n`, status: 1 }
-    }
-    operands.push(arg)
-  }
-  if (symbolic) {
-    return { stdout: '', stderr: 'ln: symbolic links are not supported in this shell\n', status: 1 }
-  }
-  if (operands.length < 2) {
-    return { stdout: '', stderr: 'ln: missing operand\n', status: 1 }
-  }
-  const src = resolvePath(operands[0])
-  const dst = resolvePath(operands[1])
-  if (!fsExists(src) || !fsIsFile(src)) {
-    return { stdout: '', stderr: `ln: failed to access '${src}'\n`, status: 1 }
-  }
-  vfs[dst] = vfs[src]
-  touchMtime(dirname(dst))
-  return { stdout: '', stderr: '', status: 0 }
-}
-
 function builtinXxd(args: string[], stdin: string): RuntimeCommandResult {
   const source = args[0]
   let text = maybeReadStdin(stdin)
   if (source && source !== '-') {
     const target = resolvePath(source)
-    if (!fsExists(target) || !fsIsFile(target)) {
+    if (!fsState.exists(target) || !fsState.isFile(target)) {
       return { stdout: '', stderr: `xxd: ${target}: No such file\n`, status: 1 }
     }
-    text = readTextFile(target)
+    text = fsState.getFileText(target) ?? ''
   }
   const bytes = new TextEncoder().encode(text)
   const lines: string[] = []
@@ -2915,7 +2030,7 @@ async function builtinCurl(args: string[], _stdin: string): Promise<RuntimeComma
       output += await response.text()
     }
     if (outputPath) {
-      writeTextFile(outputPath, output)
+      fsState.putFileText(outputPath, output)
       return { stdout: '', stderr: '', status: response.ok ? 0 : 22 }
     }
     return { stdout: silent ? '' : output, stderr: '', status: response.ok ? 0 : 22 }
@@ -3011,10 +2126,10 @@ function builtinLess(args: string[], stdin: string): RuntimeCommandResult {
     contents = stdin
   } else {
     const target = resolvePath(args[0])
-    if (!fsExists(target) || !fsIsFile(target)) {
+    if (!fsState.exists(target) || !fsState.isFile(target)) {
       return { stdout: '', stderr: `less: ${target}: no such file\n`, status: 1 }
     }
-    contents = readTextFile(target)
+    contents = fsState.getFileText(target) ?? ''
   }
 
   if (!contents) {
@@ -3118,107 +2233,6 @@ function builtinUnset(args: string[]): RuntimeCommandResult {
   return { stdout: '', stderr: '', status: 0 }
 }
 
-function builtinRm(args: string[]): RuntimeCommandResult {
-  let recursive = false
-  let force = false
-  let directory = false
-  let verbose = false
-  const targets: string[] = []
-  let stopFlags = false
-
-  for (const arg of args) {
-    if (!stopFlags && arg === '--') {
-      stopFlags = true
-      continue
-    }
-    if (!stopFlags && arg.startsWith('-') && arg !== '-') {
-      for (const flag of arg.slice(1)) {
-        if (flag === 'r' || flag === 'R') {
-          recursive = true
-          continue
-        }
-        if (flag === 'f') {
-          force = true
-          continue
-        }
-        if (flag === 'd') {
-          directory = true
-          continue
-        }
-        if (flag === 'v') {
-          verbose = true
-          continue
-        }
-        if (flag === 'i' || flag === 'I') {
-          return { stdout: '', stderr: `rm: option -- ${flag} is not supported in this shell\n`, status: 1 }
-        }
-        return { stdout: '', stderr: `rm: invalid option -- ${flag}\n`, status: 1 }
-      }
-      continue
-    }
-    targets.push(arg)
-  }
-
-  if (targets.length === 0) {
-    return force ? { stdout: '', stderr: '', status: 0 } : { stdout: '', stderr: 'rm: missing operand\n', status: 1 }
-  }
-
-  let stdout = ''
-  let stderr = ''
-  let status = 0
-  for (const arg of targets) {
-    const target = resolvePath(arg)
-    if (!fsExists(target)) {
-      if (!force) {
-        stderr += `rm: ${target}: no such file or directory\n`
-        status = 1
-      }
-      continue
-    }
-    if (fsIsDir(target) && !recursive && !directory) {
-      stderr += `rm: ${target}: is a directory\n`
-      status = 1
-      continue
-    }
-    try {
-      removePath(target, recursive)
-      if (verbose) {
-        stdout += `removed '${target}'\n`
-      }
-    } catch (error) {
-      stderr += `${error instanceof Error ? error.message : String(error)}\n`
-      status = 1
-    }
-  }
-  return { stdout, stderr, status }
-}
-
-function builtinCp(args: string[]): RuntimeCommandResult {
-  if (args.length < 2) {
-    return { stdout: '', stderr: 'cp: missing operand\n', status: 1 }
-  }
-  const src = resolvePath(args[0])
-  const dst = resolvePath(args[1])
-  if (!fsExists(src)) {
-    return { stdout: '', stderr: `cp: ${src}: no such file\n`, status: 1 }
-  }
-  copyPath(src, dst)
-  return { stdout: '', stderr: '', status: 0 }
-}
-
-function builtinMv(args: string[]): RuntimeCommandResult {
-  if (args.length < 2) {
-    return { stdout: '', stderr: 'mv: missing operand\n', status: 1 }
-  }
-  const src = resolvePath(args[0])
-  const dst = resolvePath(args[1])
-  if (!fsExists(src)) {
-    return { stdout: '', stderr: `mv: ${src}: no such file or directory\n`, status: 1 }
-  }
-  movePath(src, dst)
-  return { stdout: '', stderr: '', status: 0 }
-}
-
 function builtinAlias(args: string[]): RuntimeCommandResult {
   if (args.length === 0) {
     return {
@@ -3277,7 +2291,7 @@ async function builtinPython(args: string[], stdin: string): Promise<RuntimeComm
     if (args.length === 0) {
       if (stdin.trim()) {
         await runPythonCode(stdin)
-        syncPyodideToVfs()
+        syncPyodideToFsState()
         return { stdout: '', stderr: '', status: 0 }
       }
       return await enterPythonRepl()
@@ -3289,16 +2303,16 @@ async function builtinPython(args: string[], stdin: string): Promise<RuntimeComm
         return { stdout: '', stderr: 'python: expected code after -c\n', status: 1 }
       }
       await runPythonCode(code)
-      syncPyodideToVfs()
+      syncPyodideToFsState()
       return { stdout: '', stderr: '', status: 0 }
     }
 
     const path = resolvePath(args[0])
-    if (!fsExists(path) || !fsIsFile(path)) {
+    if (!fsState.exists(path) || !fsState.isFile(path)) {
       return { stdout: '', stderr: `python: ${path}: no such file\n`, status: 1 }
     }
     await runPythonScript(path)
-    syncPyodideToVfs()
+    syncPyodideToFsState()
     return { stdout: '', stderr: '', status: 0 }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
@@ -3326,7 +2340,7 @@ async function handlePythonLine(line: string): Promise<RuntimeCommandResult> {
 
   try {
     await pushPythonReplLine(line)
-    syncPyodideToVfs()
+    syncPyodideToFsState()
     await persistHomeIfAllowed()
     return { stdout: '', stderr: '', status: 0 }
   } catch (error) {
@@ -3455,10 +2469,8 @@ async function initializeRuntime() {
     return
   }
   seedHome()
-  const persisted = await loadSnapshotFromDb()
-  restoreHome(persisted)
+  await fsState.loadFromDb()
   loadHistoryFromFile()
-  lastSyncedHome = snapshotHome()
   ready = true
   post({ type: 'ready' })
   post({ type: 'stdout', data: 'Magniquick runtime lab\nShared VFS + shell + Pyodide\n\n' })
