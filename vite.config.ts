@@ -1,8 +1,22 @@
 import { defineConfig } from 'vite'
 import { sveltekit } from '@sveltejs/kit/vite'
 
+const emptyNodeModule = new URL('./src/shims/node-empty.ts', import.meta.url).pathname
+const nodeOnlyModules = [
+  'node:child_process',
+  'node:crypto',
+  'node:fs/promises',
+  'node:fs',
+  'node:path',
+  'node:url',
+  'node:vm',
+]
+
 export default defineConfig({
   plugins: [sveltekit()],
+  resolve: {
+    alias: Object.fromEntries(nodeOnlyModules.map((id) => [id, emptyNodeModule])),
+  },
   optimizeDeps: {
     exclude: ['pyodide'],
   },

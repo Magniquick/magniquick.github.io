@@ -15,7 +15,7 @@
     "precheck": "bun run generate",
     "check": "bun --bun svelte-kit sync && bun --bun svelte-check --tsconfig ./tsconfig.json",
     "pretest:smoke": "bun run generate",
-    "test:smoke": "bun --bun playwright test"
+    "test:smoke": "env -u NO_COLOR bun --bun playwright test"
   },
   "dependencies": {
     "@bjorn3/browser_wasi_shim": "^0.4.2",
