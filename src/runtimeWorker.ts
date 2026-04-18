@@ -2009,7 +2009,12 @@ async function builtinCurl(args: string[], _stdin: string): Promise<RuntimeComma
   }
 
   try {
-    const response = await fetch(url, { method, headers, redirect: followRedirects ? 'follow' : 'manual' })
+    const response = await fetch(url, {
+      cache: 'no-store',
+      method,
+      headers,
+      redirect: followRedirects ? 'follow' : 'manual',
+    })
     let output = ''
     if (includeHeaders || headOnly) {
       output += `HTTP ${response.status} ${response.statusText}\n`
