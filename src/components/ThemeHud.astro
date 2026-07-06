@@ -1,0 +1,52 @@
+---
+// Fixed HUD: accent (amber/cyan) + scanline (hard/soft) toggles, persisted to
+// localStorage, plus a live DSEG7 clock. No framework — plain inline script.
+---
+<div class="hud" role="group" aria-label="theme controls">
+  <button data-acc="amber" title="amber accent">amber</button>
+  <button data-acc="cyan" title="cyan accent">cyan</button>
+  <span class="sep2"></span>
+  <button data-scan title="toggle scanlines">scan</button>
+  <span class="sep2"></span>
+  <span class="clk" id="clk" aria-hidden="true">00:00:00</span>
+</div>
+
+<script is:inline>
+  (function () {
+    var root = document.documentElement;
+    var accBtns = document.querySelectorAll('.hud [data-acc]');
+    var scanBtn = document.querySelector('.hud [data-scan]');
+
+    function syncAccent() {
+      var cur = root.dataset.accent === 'cyan' ? 'cyan' : 'amber';
+      accBtns.forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.acc === cur)); });
+    }
+    function syncScan() {
+      if (scanBtn) scanBtn.setAttribute('aria-pressed', String(root.dataset.scan === 'soft'));
+    }
+    accBtns.forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (b.dataset.acc === 'cyan') root.dataset.accent = 'cyan';
+        else root.removeAttribute('data-accent');
+        try { localStorage.setItem('accent', b.dataset.acc); } catch (e) {}
+        syncAccent();
+      });
+    });
+    if (scanBtn) scanBtn.addEventListener('click', function () {
+      var soft = root.dataset.scan === 'soft';
+      if (soft) root.removeAttribute('data-scan'); else root.dataset.scan = 'soft';
+      try { localStorage.setItem('scan', soft ? 'hard' : 'soft'); } catch (e) {}
+      syncScan();
+    });
+    syncAccent(); syncScan();
+
+    // live clock
+    var clk = document.getElementById('clk');
+    function tick() {
+      var d = new Date();
+      var p = function (n) { return String(n).padStart(2, '0'); };
+      clk.textContent = p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+    }
+    tick(); setInterval(tick, 1000);
+  })();
+</script>

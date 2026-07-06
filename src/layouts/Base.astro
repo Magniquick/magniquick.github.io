@@ -1,0 +1,55 @@
+---
+import '../styles/global.css';
+import ThemeHud from '../components/ThemeHud.astro';
+
+interface Props { title?: string; description?: string; }
+const {
+  title = 'navon john lukose',
+  description = 'kernel dev · ctf · machine learning — the site of Navon John Lukose (Magniquick).',
+} = Astro.props;
+
+const base = import.meta.env.BASE_URL; // '/' at root, '/repo/' under a project page
+---
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{title}</title>
+  <meta name="description" content={description} />
+  <link rel="icon" href={`${base}favicon.svg`} type="image/svg+xml" />
+  <link rel="alternate" type="application/rss+xml" title="navon — /blog" href={`${base}rss.xml`} />
+  <meta name="generator" content={Astro.generator} />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=VT323&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <!-- apply saved theme before paint to avoid a flash -->
+  <script is:inline>
+    (function () {
+      try {
+        var a = localStorage.getItem('accent');
+        if (a === 'cyan') document.documentElement.dataset.accent = 'cyan';
+        var s = localStorage.getItem('scan');
+        if (s === 'soft') document.documentElement.dataset.scan = 'soft';
+      } catch (e) {}
+    })();
+  </script>
+</head>
+<body>
+  <slot />
+  <ThemeHud />
+
+  <!-- staggered entrance for .rise elements (disabled under reduced-motion by CSS) -->
+  <script>
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!reduce) {
+      document.querySelectorAll('.rise').forEach((el, i) => {
+        (el as HTMLElement).style.animationDelay = i * 40 + 'ms';
+      });
+    }
+  </script>
+
+  <!-- oneko pixel-cat pet (self-disables under reduced-motion) -->
+  <script src={`${base}pet/oneko.js`} data-cat={`${base}pet/oneko.gif`} is:inline></script>
+</body>
+</html>

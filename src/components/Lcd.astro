@@ -1,0 +1,6 @@
+---
+// Seven-segment (DSEG7) readout with a dim "ghost 8s" backing layer.
+interface Props { ghost: string; acc?: boolean; class?: string; }
+const { ghost, acc = false, class: cls } = Astro.props;
+---
+<span class:list={['lcd', acc && 'acc', cls]} data-ghost={ghost}><slot /></span>

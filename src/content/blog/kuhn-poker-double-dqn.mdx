@@ -1,0 +1,31 @@
+---
+title: "teaching a 3 MB network to play poker"
+description: "Double DQN as a tractable alternative to CFR for Kuhn Poker — Nash-like play in 1–2 hours on an entry-level MX250."
+pubDate: 2026-06-20
+tags: ["rl", "research"]
+---
+
+For summer research at IIM Kozhikode I wanted to see how far you can push
+**reinforcement learning on consumer hardware** — no A100s, just my laptop's
+MX250. The testbed: [Kuhn Poker](https://github.com/Magniquick/gym-kuhn-poker),
+a toy imperfect-information game that's small enough to reason about but still
+requires mixed strategies.
+
+## why not just CFR?
+
+Counterfactual Regret Minimization is the standard answer for imperfect-info
+games, and it's provably convergent. But it's also game-tree-shaped: you carry
+regret tables over information sets. I wanted to know whether a plain
+**Double DQN** — value-based, model-free — could recover something Nash-like
+without any of that machinery.
+
+## the result
+
+- A working Gymnasium environment for Kuhn Poker (the first I could find).
+- Double DQN converges to Nash-like strategies in **1–2 hours** on the MX250.
+- The whole forward pass fits in **~3 MB**.
+
+> The point isn't that DQN beats CFR — it doesn't, in general. The point is how
+> *little* compute you need to get respectable play on a small game.
+
+Paper and code are linked from the [research repo](https://github.com/Magniquick/reinforcement-learning).

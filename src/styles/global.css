@@ -1,0 +1,221 @@
+/* ============================================================
+   navon.dev — shared design system
+   fonts: VT323 + IBM Plex Mono via Google Fonts (linked in <head>)
+          DSEG7 (seven-segment) self-hosted · keshikan.net/fonts
+   palette: neutral OKLCH; accent on the deuteranopia-safe blue↔yellow axis
+   ============================================================ */
+
+@font-face{
+  font-family:"DSEG7";
+  src:url("/fonts/DSEG7Classic-Regular.woff2") format("woff2");
+  font-display:swap;
+}
+
+:root{
+  --bg-1: oklch(19% 0 0);
+  --bg-2: oklch(23% 0 0);
+  --bg-3: oklch(27% 0 0);
+  --txt-1: oklch(90% 0 0);
+  --txt-2: oklch(75% 0 0);
+  --txt-3: oklch(50% 0 0);
+  --txt-4: oklch(40% 0 0);
+  --line: oklch(34% 0 0);
+
+  /* accent — amber default (pulled from hybrid-dark). deuteranopia-safe. */
+  --accent: oklch(82% 0.14 80);
+  --accent-2: oklch(70% 0.13 78);
+
+  --mono:"IBM Plex Mono", ui-monospace, "JetBrains Mono", Menlo, monospace;
+  --term:"VT323", ui-monospace, monospace;
+  --seg:"DSEG7","VT323", monospace;
+  --seg-ghost: color-mix(in srgb, var(--txt-1) 12%, transparent);
+
+  --scan-opacity:.5;
+  --maxw:1180px;
+}
+
+/* alt accent (cyan) + softer scanline — toggled via <html data-*> (see ThemeHud) */
+:root[data-accent="cyan"]{ --accent: oklch(80% 0.11 210); --accent-2: oklch(68% 0.11 212); }
+:root[data-scan="soft"]{ --scan-opacity:.14; }
+
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:var(--bg-1); color:var(--txt-1);
+  font-family:var(--mono); font-size:14.5px; line-height:1.6;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  padding:0 14px 48px;
+}
+a{color:inherit; text-decoration:none}
+a.link{color:var(--txt-1); border-bottom:1px solid var(--txt-4); transition:.15s}
+a.link:hover{color:var(--accent); border-bottom-color:var(--accent)}
+::selection{background:oklch(44% 0 0); color:#fff}
+
+/* ---- scanline overlay (CRT) ---- */
+html::before{
+  content:""; position:fixed; inset:0; z-index:1000; pointer-events:none; opacity:var(--scan-opacity);
+  --h:2px; --gap:1px; --c:color-mix(in srgb, var(--bg-1) 62%, transparent);
+  background-image:repeating-linear-gradient(to bottom,
+    transparent, transparent var(--h),
+    var(--c) var(--h), var(--c) calc(var(--h) + var(--gap)));
+}
+
+/* ---- seven-segment LCD readout (big numbers only) ---- */
+.lcd{ font-family:var(--seg); position:relative; display:inline-block; color:var(--txt-1); letter-spacing:1px; }
+.lcd::before{ content:attr(data-ghost); position:absolute; inset:0; z-index:-1; color:var(--seg-ghost); pointer-events:none; }
+.lcd.acc{color:var(--accent)}
+
+/* ---- entrance animation (fade + rise, staggered via JS) ---- */
+@keyframes rise{ from{opacity:0; transform:translateY(14px)} to{opacity:1; transform:translateY(0)} }
+.rise{opacity:0; animation:rise .5s cubic-bezier(.22,.61,.36,1) both}
+@keyframes blink{50%{opacity:0}}
+.blink{animation:blink 1.05s steps(1) infinite; color:var(--accent)}
+@media (prefers-reduced-motion: reduce){
+  .blink{animation:none}
+  .rise{opacity:1; transform:none; animation:none}
+}
+
+/* ---- header ---- */
+header.site{max-width:var(--maxw); margin:0 auto; padding:40px 0 26px; text-align:center}
+.pwd{font-family:var(--term); font-size:20px; color:var(--txt-3)}
+.title{font-family:var(--term); font-size:clamp(44px,8vw,76px); line-height:.9; color:var(--txt-1); letter-spacing:1px; margin-top:2px;}
+.subtitle{font-family:var(--term); font-size:22px; color:var(--txt-2); margin-top:8px}
+.subtitle b{color:var(--accent); font-weight:400}
+.nav{margin-top:10px; font-size:13px; color:var(--txt-3); display:flex; gap:14px; justify-content:center}
+.nav a{color:var(--txt-2)} .nav a[aria-current]{color:var(--accent)}
+
+/* ---- bento columns ---- */
+.grid{max-width:var(--maxw); margin:0 auto; display:flex; gap:12px; align-items:flex-start; justify-content:center}
+.col{display:flex; flex-direction:column; gap:12px; min-width:0}
+.col.left{flex:0 1 320px}
+.col.mid{flex:0 1 460px}
+.col.right{flex:0 1 340px}
+@media (max-width:1000px){ .grid{flex-direction:column; align-items:stretch; max-width:560px} .col{flex:1 1 auto} }
+
+/* ---- window ---- */
+.win{border:1px solid var(--line); border-radius:5px; background:transparent; transition:border-color .18s}
+.win:hover{border-color:color-mix(in srgb,var(--accent) 55%,transparent)}
+.bar{display:flex; align-items:center; gap:10px; padding:10px 12px; user-select:none}
+.dots{display:flex; align-items:center; gap:7px; color:var(--txt-3)}
+.dots svg{display:block}
+.bar .sep{width:1px; height:16px; background:var(--txt-1); opacity:.16; border-radius:2px}
+.bar .name{font-size:13px; color:var(--txt-3)}
+.body{padding:2px 14px 15px}
+.body.pad{padding:6px 16px 18px}
+
+h3.k{color:var(--txt-3); font-size:13px; margin:0 0 6px}
+.muted{color:var(--txt-2)}
+.dim{color:var(--txt-3)}
+.accent{color:var(--accent)}
+hr.d{border:0; border-top:1px dashed var(--line); margin:12px 0}
+
+/* ---- inverted block heading ---- */
+.hblock{ display:inline-block; background:var(--txt-1); color:var(--bg-1); font-family:var(--term); font-size:15px; line-height:1; letter-spacing:1px; padding:4px 9px 5px; margin:0 0 10px; text-transform:lowercase; }
+.hblock.acc{background:var(--accent)}
+
+/* whoami */
+.who{display:flex; gap:16px}
+.who img{width:118px; height:118px; border:1px solid var(--line); image-rendering:auto; object-fit:cover; background:var(--bg-2)}
+.who .meta{font-family:var(--mono); font-size:13.5px; line-height:1.5}
+.who .meta .row{display:flex; gap:8px; color:var(--txt-2)}
+.who .intro{font-family:var(--mono); font-size:13.5px; line-height:1.55; color:var(--txt-1); margin-top:10px}
+
+/* motd banner */
+.banner{ display:block; background:var(--txt-1); color:var(--bg-1); font-family:var(--term); font-size:clamp(26px,4.6vw,40px); text-align:center; padding:12px 10px; letter-spacing:1px; position:relative; overflow:hidden; }
+.banner::after{ content:""; position:absolute; inset:0; pointer-events:none; opacity:.22; background-image:repeating-linear-gradient(to bottom, transparent 0 2px, var(--bg-1) 2px 3px); }
+.motd{font-size:14px; color:var(--txt-2); margin-top:14px}
+.todo{font-family:var(--mono); color:var(--txt-2); white-space:pre-wrap; margin:10px 0 0}
+.quote{color:var(--txt-3); font-style:italic; margin-top:12px}
+
+/* generic list rows */
+.rows{display:flex; flex-direction:column; gap:9px}
+.r{display:flex; justify-content:space-between; gap:12px; align-items:baseline}
+.r .l{color:var(--txt-1)}
+.r .m{color:var(--txt-3); white-space:nowrap; font-size:13px}
+.r .star{color:var(--txt-2); font-family:var(--term); font-size:16px}
+.r .star .lcd{font-size:15px; letter-spacing:1px}
+.desc{color:var(--txt-3); font-size:13px; margin-top:2px}
+.prj{padding:2px 0}
+
+/* links window */
+.links{display:flex; flex-direction:column; gap:12px}
+.links a{display:flex; align-items:center; gap:11px; color:var(--txt-1); transition:opacity .15s}
+.links a:hover{opacity:.6}
+.links svg{width:20px; height:20px; fill:var(--txt-1)}
+.links .h{color:var(--txt-3)}
+
+/* neofetch */
+.neo{display:flex; gap:16px}
+.neo pre.logo{margin:0; color:var(--accent); font-size:11px; line-height:1.15}
+.neo .kv{font-size:13.5px}
+.neo .kv .row{display:flex; gap:8px}
+.neo .kv .key{color:var(--accent); width:74px; flex:0 0 auto}
+.neo .kv .val{color:var(--txt-2)}
+.sw{display:flex; gap:0; margin-top:8px}
+.sw span{width:15px; height:15px}
+
+/* stats/ctf big numbers */
+.stats{display:flex; gap:18px; flex-wrap:wrap}
+.stat{font-family:var(--term)}
+.stat b{display:block; font-size:38px; line-height:1; color:var(--txt-1)}
+.stat b .lcd{font-size:38px; line-height:1}
+.stat small{color:var(--txt-3); font-size:14px; display:block; margin-top:3px}
+
+/* code snippet */
+pre.code{margin:8px 0 0; padding:10px 12px; background:var(--bg-2); border:1px solid var(--line); border-radius:4px; color:var(--txt-2); font-size:12.5px; overflow-x:auto; white-space:pre}
+pre.code .c{color:var(--txt-3)}
+pre.code .a{color:var(--accent)}
+
+/* 88x31 buttons */
+.btns{display:flex; flex-wrap:wrap; gap:4px}
+.b31{width:88px; height:31px; border:1px solid var(--line); display:flex; align-items:center; justify-content:center; text-align:center; font-family:var(--mono); font-size:9px; line-height:1.05; color:var(--txt-1); background:var(--bg-2); image-rendering:pixelated; padding:2px; letter-spacing:.2px; cursor:default}
+.b31.inv{background:var(--txt-1); color:var(--bg-1)}
+.b31.err{border-color:var(--accent); color:var(--accent)}
+.b31 b{color:var(--accent)}
+
+/* skills box */
+pre.box{margin:0; color:var(--txt-2); font-size:12.5px; line-height:1.45; white-space:pre; overflow-x:auto}
+pre.box .h{color:var(--txt-1)}
+
+footer.site{max-width:var(--maxw); margin:26px auto 0; text-align:center; color:var(--txt-3); font-size:13px}
+
+/* ---- theme HUD (accent / scanline / live clock) ---- */
+.hud{ position:fixed; right:14px; bottom:12px; z-index:1200; display:flex; align-items:center; gap:8px;
+  padding:6px 9px; border:1px solid var(--line); border-radius:6px; background:color-mix(in srgb,var(--bg-1) 86%,transparent); backdrop-filter:blur(3px); }
+.hud button{ font-family:var(--mono); font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--txt-3);
+  background:transparent; border:1px solid var(--line); border-radius:4px; padding:3px 7px; cursor:pointer; transition:.15s }
+.hud button:hover{border-color:var(--accent); color:var(--accent)}
+.hud button[aria-pressed="true"]{border-color:var(--accent); color:var(--accent)}
+.hud .sep2{width:1px; height:16px; background:var(--line)}
+.hud .clk{font-family:var(--seg); font-size:15px; color:var(--accent); letter-spacing:1px}
+
+/* ============================================================
+   blog — post list + prose
+   ============================================================ */
+.page{max-width:760px; margin:0 auto; padding-top:34px}
+.postlist{display:flex; flex-direction:column; gap:2px}
+.postlist a{display:flex; justify-content:space-between; gap:12px; align-items:baseline; padding:9px 4px; border-bottom:1px dashed var(--line); color:var(--txt-1)}
+.postlist a:hover{color:var(--accent)}
+.postlist .pt{display:flex; flex-direction:column; gap:3px}
+.postlist .pd{color:var(--txt-3); font-size:12px}
+.postlist time{color:var(--txt-3); font-size:12px; font-family:var(--seg); white-space:nowrap}
+.tags{display:flex; gap:6px; flex-wrap:wrap; margin-top:3px}
+.tag{font-size:10.5px; color:var(--accent-2); border:1px solid var(--line); border-radius:3px; padding:1px 6px; text-transform:lowercase}
+
+.prose{color:var(--txt-2); font-size:14.5px; line-height:1.72}
+.prose h1,.prose h2,.prose h3{color:var(--txt-1); line-height:1.25; margin:1.6em 0 .5em}
+.prose h1{font-family:var(--term); font-size:clamp(30px,5vw,44px); margin-top:0}
+.prose h2{font-size:20px; border-bottom:1px solid var(--line); padding-bottom:4px}
+.prose h3{font-size:16px}
+.prose a{color:var(--txt-1); border-bottom:1px solid var(--accent-2)}
+.prose a:hover{color:var(--accent)}
+.prose code{background:var(--bg-2); border:1px solid var(--line); border-radius:3px; padding:.05em .35em; font-size:.9em}
+.prose pre{background:var(--bg-2)!important; border:1px solid var(--line); border-radius:5px; padding:12px 14px; overflow-x:auto; font-size:13px}
+.prose pre code{background:none; border:0; padding:0}
+.prose blockquote{border-left:2px solid var(--accent); margin:1em 0; padding:.2em 0 .2em 14px; color:var(--txt-3); font-style:italic}
+.prose hr{border:0; border-top:1px dashed var(--line); margin:2em 0}
+.posthead{margin-bottom:26px}
+.posthead .meta{color:var(--txt-3); font-size:12.5px; margin-top:8px; display:flex; gap:12px; flex-wrap:wrap; align-items:center}
+.posthead .meta time{font-family:var(--seg); color:var(--accent)}
+.backlink{color:var(--txt-3); font-size:13px; display:inline-block; margin-bottom:20px}
+.backlink:hover{color:var(--accent)}

@@ -1,0 +1,35 @@
+---
+title: "hello, world (or: why this site exists)"
+description: "Spinning up a corner of the internet for kernel notes, CTF write-ups, and RL experiments — built on Astro, deployed static."
+pubDate: 2026-07-07
+tags: ["meta", "web"]
+---
+
+I finally caved and built a proper site. Not because the internet needs another
+developer homepage, but because I keep wanting somewhere to dump the *long-form*
+stuff that doesn't fit in a commit message or a CTF Discord.
+
+## what lives here
+
+- **kernel notes** — the small mainline/stable patches I land, and the debugging
+  that led to them.
+- **CTF write-ups** — mostly the crypto/ML-flavoured challenges I author for
+  [PlayingG0d](https://github.com/Magniquick), plus solves worth remembering.
+- **RL experiments** — reinforcement learning that fits in a few megabytes and
+  runs on hardware that doesn't cost three grand.
+
+## how it's built
+
+The whole thing is [Astro](https://astro.build): static output, zero JS on the
+pages that don't need it, and the design system is the same terminal-window
+aesthetic as the landing page. Code blocks are highlighted at build time:
+
+```c
+static int alc295_mute_led_quirk(struct hda_codec *codec)
+{
+        /* enable mute-LED on ALC295-based Pavilion convertibles */
+        return snd_hda_gen_add_mute_led_cdev(codec, NULL);
+}
+```
+
+More soon. This site is constantly evolving &lt;3

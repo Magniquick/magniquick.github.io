@@ -1,0 +1,21 @@
+---
+// A terminal window pane: titlebar with × □ — controls + a named title, then a body slot.
+interface Props {
+  name: string;
+  bodyClass?: string; // e.g. "pad", "pad links", "pad rows"
+  class?: string;
+}
+const { name, bodyClass = 'pad', class: cls } = Astro.props;
+---
+<section class:list={['win', 'rise', cls]}>
+  <div class="bar">
+    <span class="dots" aria-hidden="true">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 5l14 14M19 5L5 19"/></svg>
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="4" y="4" width="16" height="16"/></svg>
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14"/></svg>
+    </span>
+    <span class="sep"></span>
+    <span class="name">{name}</span>
+  </div>
+  <div class:list={['body', bodyClass]}><slot /></div>
+</section>
