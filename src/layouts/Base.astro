@@ -31,7 +31,6 @@ const base = import.meta.env.BASE_URL; // '/' at root, '/repo/' under a project 
     (function () {
       try {
         if (localStorage.getItem('accent') === 'cyan') document.documentElement.dataset.accent = 'cyan';
-        if (localStorage.getItem('scan') === 'on') document.documentElement.dataset.scan = 'on';
       } catch (e) {}
     })();
   </script>
@@ -54,13 +53,10 @@ const base = import.meta.env.BASE_URL; // '/' at root, '/repo/' under a project 
     function initHud() {
       const root = document.documentElement;
       const accBtns = document.querySelectorAll<HTMLButtonElement>('.hud [data-acc]');
-      const scanBtn = document.querySelector<HTMLButtonElement>('.hud [data-scan]');
 
       const cur = () => (root.dataset.accent === 'cyan' ? 'cyan' : 'amber');
       const syncAccent = () =>
         accBtns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.acc === cur())));
-      const syncScan = () =>
-        scanBtn?.setAttribute('aria-pressed', String(root.dataset.scan === 'on'));
 
       accBtns.forEach((b) =>
         b.addEventListener('click', () => {
@@ -70,14 +66,7 @@ const base = import.meta.env.BASE_URL; // '/' at root, '/repo/' under a project 
           syncAccent();
         })
       );
-      scanBtn?.addEventListener('click', () => {
-        const on = root.dataset.scan === 'on';
-        if (on) root.removeAttribute('data-scan');
-        else root.dataset.scan = 'on';
-        try { localStorage.setItem('scan', on ? 'off' : 'on'); } catch {}
-        syncScan();
-      });
-      syncAccent(); syncScan();
+      syncAccent();
     }
 
     // single clock interval; always writes to whichever #clk currently exists

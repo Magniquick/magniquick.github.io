@@ -30,13 +30,11 @@
   --seg:"DSEG7","VT323", monospace;
   --seg-ghost: color-mix(in srgb, var(--txt-1) 12%, transparent);
 
-  --scan-opacity:0; /* default: scanlines off (cleaner). "scan" HUD button opts in */
   --maxw:1180px;
 }
 
-/* alt accent (cyan) + softer scanline — toggled via <html data-*> (see ThemeHud) */
+/* alt accent (cyan) — toggled via <html data-accent> (see ThemeHud) */
 :root[data-accent="cyan"]{ --accent: oklch(80% 0.11 210); --accent-2: oklch(68% 0.11 212); }
-:root[data-scan="on"]{ --scan-opacity:.14; }
 
 /* native cross-document view transitions — zero JS; browsers without support
    just do an instant navigation. */
@@ -55,15 +53,6 @@ a{color:inherit; text-decoration:none}
 a.link{color:var(--txt-1); border-bottom:1px solid var(--txt-4); transition:.15s}
 a.link:hover{color:var(--accent); border-bottom-color:var(--accent)}
 ::selection{background:oklch(44% 0 0); color:#fff}
-
-/* ---- scanline overlay (CRT) ---- */
-html::before{
-  content:""; position:fixed; inset:0; z-index:1000; pointer-events:none; opacity:var(--scan-opacity);
-  --h:2px; --gap:1px; --c:color-mix(in srgb, var(--bg-1) 62%, transparent);
-  background-image:repeating-linear-gradient(to bottom,
-    transparent, transparent var(--h),
-    var(--c) var(--h), var(--c) calc(var(--h) + var(--gap)));
-}
 
 /* ---- seven-segment LCD readout (big numbers only) ---- */
 .lcd{ font-family:var(--seg); position:relative; display:inline-block; color:var(--txt-1); letter-spacing:1px; }
