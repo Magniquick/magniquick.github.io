@@ -2,6 +2,7 @@
 import { defineConfig } from 'astro/config';
 import { unified } from '@astrojs/markdown-remark';
 import expressiveCode from 'astro-expressive-code';
+import icon from 'astro-icon';
 import mdx from '@astrojs/mdx';
 import sitemap from '@astrojs/sitemap';
 
@@ -16,6 +17,8 @@ export default defineConfig({
   // project repo (e.g. /web-prototypes), set `base` and Astro rewrites asset paths.
   site: 'https://magniquick.github.io',
   // base: '/web-prototypes',
+  // inline all CSS into the HTML so first paint needs a single round-trip (14 kB rule)
+  build: { inlineStylesheets: 'always' },
   integrations: [
     // expressiveCode must precede mdx() so it handles md/mdx code fences.
     // Code blocks render in terminal/editor frames — same window-chrome motif.
@@ -31,6 +34,8 @@ export default defineConfig({
     }),
     mdx(),
     sitemap(),
+    // build-time SVG (Iconify sets: octicon + lucide); auto-sprited, zero runtime JS
+    icon(),
   ],
   markdown: {
     // Astro 7 API: pass plugins through unified() (keeps gfm/smartypants defaults).

@@ -141,7 +141,7 @@ hr.d{border:0; border-top:1px dashed var(--line); margin:12px 0}
 .links{display:flex; flex-direction:column; gap:12px}
 .links a{display:flex; align-items:center; gap:11px; color:var(--txt-1); transition:opacity .15s}
 .links a:hover{opacity:.6}
-.links svg{width:20px; height:20px; fill:var(--txt-1)}
+.links svg{width:20px; height:20px} /* icons inherit currentColor from the link */
 .links .h{color:var(--txt-3)}
 
 /* neofetch */
