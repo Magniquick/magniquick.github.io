@@ -31,7 +31,7 @@ const base = import.meta.env.BASE_URL; // '/' at root, '/repo/' under a project 
     (function () {
       try {
         if (localStorage.getItem('accent') === 'cyan') document.documentElement.dataset.accent = 'cyan';
-        if (localStorage.getItem('scan') === 'soft') document.documentElement.dataset.scan = 'soft';
+        if (localStorage.getItem('scan') === 'on') document.documentElement.dataset.scan = 'on';
       } catch (e) {}
     })();
   </script>
@@ -60,7 +60,7 @@ const base = import.meta.env.BASE_URL; // '/' at root, '/repo/' under a project 
       const syncAccent = () =>
         accBtns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.acc === cur())));
       const syncScan = () =>
-        scanBtn?.setAttribute('aria-pressed', String(root.dataset.scan === 'soft'));
+        scanBtn?.setAttribute('aria-pressed', String(root.dataset.scan === 'on'));
 
       accBtns.forEach((b) =>
         b.addEventListener('click', () => {
@@ -71,10 +71,10 @@ const base = import.meta.env.BASE_URL; // '/' at root, '/repo/' under a project 
         })
       );
       scanBtn?.addEventListener('click', () => {
-        const soft = root.dataset.scan === 'soft';
-        if (soft) root.removeAttribute('data-scan');
-        else root.dataset.scan = 'soft';
-        try { localStorage.setItem('scan', soft ? 'hard' : 'soft'); } catch {}
+        const on = root.dataset.scan === 'on';
+        if (on) root.removeAttribute('data-scan');
+        else root.dataset.scan = 'on';
+        try { localStorage.setItem('scan', on ? 'off' : 'on'); } catch {}
         syncScan();
       });
       syncAccent(); syncScan();

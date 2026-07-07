@@ -30,13 +30,13 @@
   --seg:"DSEG7","VT323", monospace;
   --seg-ghost: color-mix(in srgb, var(--txt-1) 12%, transparent);
 
-  --scan-opacity:.5;
+  --scan-opacity:0; /* default: scanlines off (cleaner). "scan" HUD button opts in */
   --maxw:1180px;
 }
 
 /* alt accent (cyan) + softer scanline — toggled via <html data-*> (see ThemeHud) */
 :root[data-accent="cyan"]{ --accent: oklch(80% 0.11 210); --accent-2: oklch(68% 0.11 212); }
-:root[data-scan="soft"]{ --scan-opacity:.14; }
+:root[data-scan="on"]{ --scan-opacity:.14; }
 
 /* native cross-document view transitions — zero JS; browsers without support
    just do an instant navigation. */
