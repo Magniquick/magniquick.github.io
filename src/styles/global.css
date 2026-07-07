@@ -173,7 +173,7 @@ pre.box .h{color:var(--txt-1)}
 
 footer.site{max-width:var(--maxw); margin:26px auto 0; text-align:center; color:var(--txt-3); font-size:13px}
 
-/* ---- theme HUD (accent / scanline / live clock) ---- */
+/* ---- theme HUD (accent toggle + live clock) ---- */
 .hud{ position:fixed; right:14px; bottom:12px; z-index:1200; display:flex; align-items:center; gap:8px;
   padding:6px 9px; border:1px solid var(--line); border-radius:6px; background:color-mix(in srgb,var(--bg-1) 86%,transparent); backdrop-filter:blur(3px); }
 .hud button{ font-family:var(--mono); font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--txt-3);
