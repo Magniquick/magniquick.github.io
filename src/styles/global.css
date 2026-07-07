@@ -209,9 +209,9 @@ footer.site{max-width:var(--maxw); margin:26px auto 0; text-align:center; color:
 .prose h3{font-size:16px}
 .prose a{color:var(--txt-1); border-bottom:1px solid var(--accent-2)}
 .prose a:hover{color:var(--accent)}
-.prose code{background:var(--bg-2); border:1px solid var(--line); border-radius:3px; padding:.05em .35em; font-size:.9em}
-.prose pre{background:var(--bg-2)!important; border:1px solid var(--line); border-radius:5px; padding:12px 14px; overflow-x:auto; font-size:13px}
-.prose pre code{background:none; border:0; padding:0}
+/* inline code only — code blocks are owned by Expressive Code (.expressive-code) */
+.prose :not(pre) > code{background:var(--bg-2); border:1px solid var(--line); border-radius:3px; padding:.05em .35em; font-size:.9em}
+.prose .expressive-code{margin:1.1em 0}
 .prose blockquote{border-left:2px solid var(--accent); margin:1em 0; padding:.2em 0 .2em 14px; color:var(--txt-3); font-style:italic}
 .prose hr{border:0; border-top:1px dashed var(--line); margin:2em 0}
 .posthead{margin-bottom:26px}

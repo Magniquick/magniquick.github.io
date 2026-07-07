@@ -1,5 +1,10 @@
 ---
+import '@fontsource/vt323'; // display (400 only)
+import '@fontsource/ibm-plex-mono/400.css';
+import '@fontsource/ibm-plex-mono/500.css';
+import '@fontsource/ibm-plex-mono/600.css';
 import '../styles/global.css';
+import { ClientRouter } from 'astro:transitions';
 import ThemeHud from '../components/ThemeHud.astro';
 
 interface Props { title?: string; description?: string; }
@@ -20,17 +25,13 @@ const base = import.meta.env.BASE_URL; // '/' at root, '/repo/' under a project 
   <link rel="icon" href={`${base}favicon.svg`} type="image/svg+xml" />
   <link rel="alternate" type="application/rss+xml" title="navon — /blog" href={`${base}rss.xml`} />
   <meta name="generator" content={Astro.generator} />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=VT323&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <!-- apply saved theme before paint to avoid a flash -->
+  <ClientRouter />
+  <!-- apply saved theme before paint to avoid a flash (runs on hard loads) -->
   <script is:inline>
     (function () {
       try {
-        var a = localStorage.getItem('accent');
-        if (a === 'cyan') document.documentElement.dataset.accent = 'cyan';
-        var s = localStorage.getItem('scan');
-        if (s === 'soft') document.documentElement.dataset.scan = 'soft';
+        if (localStorage.getItem('accent') === 'cyan') document.documentElement.dataset.accent = 'cyan';
+        if (localStorage.getItem('scan') === 'soft') document.documentElement.dataset.scan = 'soft';
       } catch (e) {}
     })();
   </script>
@@ -39,17 +40,71 @@ const base = import.meta.env.BASE_URL; // '/' at root, '/repo/' under a project 
   <slot />
   <ThemeHud />
 
-  <!-- staggered entrance for .rise elements (disabled under reduced-motion by CSS) -->
+  <!-- init re-runs on every navigation (astro:page-load fires on first load too) -->
   <script>
     const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (!reduce) {
-      document.querySelectorAll('.rise').forEach((el, i) => {
-        (el as HTMLElement).style.animationDelay = i * 40 + 'ms';
+
+    function initRise() {
+      if (reduce) return;
+      document.querySelectorAll<HTMLElement>('.rise').forEach((el, i) => {
+        el.style.animationDelay = i * 40 + 'ms';
       });
     }
+
+    function initHud() {
+      const root = document.documentElement;
+      const accBtns = document.querySelectorAll<HTMLButtonElement>('.hud [data-acc]');
+      const scanBtn = document.querySelector<HTMLButtonElement>('.hud [data-scan]');
+
+      const cur = () => (root.dataset.accent === 'cyan' ? 'cyan' : 'amber');
+      const syncAccent = () =>
+        accBtns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.acc === cur())));
+      const syncScan = () =>
+        scanBtn?.setAttribute('aria-pressed', String(root.dataset.scan === 'soft'));
+
+      accBtns.forEach((b) =>
+        b.addEventListener('click', () => {
+          if (b.dataset.acc === 'cyan') root.dataset.accent = 'cyan';
+          else root.removeAttribute('data-accent');
+          try { localStorage.setItem('accent', b.dataset.acc!); } catch {}
+          syncAccent();
+        })
+      );
+      scanBtn?.addEventListener('click', () => {
+        const soft = root.dataset.scan === 'soft';
+        if (soft) root.removeAttribute('data-scan');
+        else root.dataset.scan = 'soft';
+        try { localStorage.setItem('scan', soft ? 'hard' : 'soft'); } catch {}
+        syncScan();
+      });
+      syncAccent(); syncScan();
+    }
+
+    // single clock interval; always writes to whichever #clk currently exists
+    let clockStarted = false;
+    function initClock() {
+      if (clockStarted) return;
+      clockStarted = true;
+      const p = (n: number) => String(n).padStart(2, '0');
+      const tick = () => {
+        const c = document.getElementById('clk');
+        if (!c) return;
+        const d = new Date();
+        c.textContent = `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+      };
+      tick();
+      setInterval(tick, 1000);
+    }
+
+    document.addEventListener('astro:page-load', () => {
+      initRise();
+      initHud();
+      initClock();
+    });
   </script>
 
-  <!-- oneko pixel-cat pet (self-disables under reduced-motion) -->
-  <script src={`${base}pet/oneko.js`} data-cat={`${base}pet/oneko.gif`} is:inline></script>
+  <!-- oneko pixel-cat pet (self-disables under reduced-motion). data-astro-rerun
+       recreates the cat after each view transition (its element lives on <body>). -->
+  <script src={`${base}pet/oneko.js`} data-cat={`${base}pet/oneko.gif`} is:inline data-astro-rerun></script>
 </body>
 </html>
