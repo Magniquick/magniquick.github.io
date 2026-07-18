@@ -44,9 +44,11 @@
     // SW with COEP/COOP → isolated; the autoboot flag (in localStorage) reopens us after.
     isolating = true
     localStorage.setItem(AUTOBOOT_KEY, String(Date.now()))
+    console.log('[shelldbg] boot set flag', { ls: localStorage.getItem(AUTOBOOT_KEY), iso: window.crossOriginIsolated })
     try {
       await navigator.serviceWorker.register(SW_URL)
       await navigator.serviceWorker.ready
+      console.log('[shelldbg] reloading', { ls: localStorage.getItem(AUTOBOOT_KEY) })
       location.reload()
     } catch {
       localStorage.removeItem(AUTOBOOT_KEY)
@@ -57,6 +59,7 @@
 
   onMount(() => {
     const raw = localStorage.getItem(AUTOBOOT_KEY)
+    console.log('[shelldbg] onMount', { ls: raw, ss: sessionStorage.getItem(AUTOBOOT_KEY), iso: window.crossOriginIsolated, ctrl: !!(navigator.serviceWorker && navigator.serviceWorker.controller), href: location.href })
     if (!raw) return
     localStorage.removeItem(AUTOBOOT_KEY)
     if (Date.now() - Number(raw) < AUTOBOOT_TTL) launch() // just came back from the reload
