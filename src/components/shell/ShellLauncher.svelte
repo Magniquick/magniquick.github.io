@@ -3,15 +3,60 @@
 <script lang="ts">
   // The ./shell --wasm tile. Shows a lightweight boot prompt inline; the heavy terminal
   // (xterm + pyodide worker) is only mounted on first click, in a portalled overlay.
+  //
+  // Cross-origin isolation (for pyodide's SharedArrayBuffer Ctrl-C) is deferred to launch
+  // time: we register the coi service worker and reload ONLY when someone actually boots
+  // the shell — so visitors who never open the terminal never pay a reload. The reload is
+  // one-time; an autoboot flag reopens the terminal after it so it stays a single click.
+  import { onMount } from 'svelte'
   import Terminal from './Terminal.svelte'
+
+  const SW_URL = `${import.meta.env.BASE_URL}coi-serviceworker.js`
+  const AUTOBOOT_KEY = 'shell:autoboot'
 
   let launched = $state(false) // has the terminal ever been booted (kept mounted after)
   let open = $state(false) // is the overlay currently visible
+  let isolating = $state(false) // registering SW + about to reload
 
-  function boot() {
+  function launch() {
     launched = true
     open = true
   }
+
+  async function boot() {
+    // Already isolated (returning visitor whose SW controls the page, or dev headers),
+    // or isolation isn't achievable here → just open. Without SAB the shell still runs;
+    // only Ctrl-C interrupt of a running python is unavailable.
+    if (
+      window.crossOriginIsolated ||
+      !window.isSecureContext ||
+      !('serviceWorker' in navigator)
+    ) {
+      launch()
+      return
+    }
+    // Need isolation: register the SW, then reload once. The flag reopens us afterward.
+    isolating = true
+    try {
+      sessionStorage.setItem(AUTOBOOT_KEY, '1')
+      await navigator.serviceWorker.register(SW_URL)
+      await navigator.serviceWorker.ready // wait for an active worker before reloading
+      location.reload()
+    } catch {
+      sessionStorage.removeItem(AUTOBOOT_KEY)
+      isolating = false
+      launch() // fall back to a non-isolated (no Ctrl-C) session
+    }
+  }
+
+  onMount(() => {
+    // Came back from the isolation reload → reopen automatically (isolated if the SW now
+    // controls us; degraded otherwise — never reload again, to avoid a loop).
+    if (sessionStorage.getItem(AUTOBOOT_KEY)) {
+      sessionStorage.removeItem(AUTOBOOT_KEY)
+      launch()
+    }
+  })
 
   function close() {
     open = false
@@ -35,10 +80,10 @@
 
 <svelte:window onkeydown={onKeydown} />
 
-<button class="boot" type="button" onclick={boot} aria-haspopup="dialog">
+<button class="boot" type="button" onclick={boot} disabled={isolating} aria-haspopup="dialog">
   <span class="lede">micropython + wasm terminal</span>
   <span class="cmd"><span class="prompt">$</span> ./shell --wasm<span class="cursor">▸</span></span>
-  <span class="hint">click to boot — xterm.js shell w/ python, coreutils &amp; more, all client-side</span>
+  <span class="hint">{isolating ? 'booting…' : 'click to boot — xterm.js shell w/ python, coreutils & more, all client-side'}</span>
 </button>
 
 {#if launched}
