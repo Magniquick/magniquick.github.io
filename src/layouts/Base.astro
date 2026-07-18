@@ -21,9 +21,9 @@ const base = import.meta.env.BASE_URL; // '/' at root, '/repo/' under a project 
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- Cross-origin isolation for the ./shell terminal's pyodide (SharedArrayBuffer) is
-       set up on demand: the shell launcher registers coi-serviceworker.js and reloads
-       only when someone actually boots the shell, so other visitors pay nothing. -->
+  {/* Cross-origin isolation for the ./shell terminal's pyodide (SharedArrayBuffer) is
+      set up on demand: the shell launcher registers coi-serviceworker.js and reloads
+      only when someone actually boots the shell, so other visitors pay nothing. */}
 
   <title>{title}</title>
   <meta name="description" content={description} />
@@ -35,7 +35,7 @@ const base = import.meta.env.BASE_URL; // '/' at root, '/repo/' under a project 
 <body>
   <slot />
 
-  <!-- SPA nav via ClientRouter → re-init each astro:page-load (fires on first load too) -->
+  {/* SPA nav via ClientRouter → re-init each astro:page-load (fires on first load too) */}
   <script>
     const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -102,7 +102,7 @@ const base = import.meta.env.BASE_URL; // '/' at root, '/repo/' under a project 
     document.addEventListener('astro:page-load', () => { initRise(); initScramble(); });
   </script>
 
-  <!-- oneko pixel-cat pet (self-disables under reduced-motion); recreated per nav -->
+  {/* oneko pixel-cat pet (self-disables under reduced-motion); recreated per nav */}
   <script src={`${base}pet/oneko.js`} data-cat={`${base}pet/oneko.gif`} is:inline data-astro-rerun></script>
 </body>
 </html>
