@@ -35,13 +35,30 @@
       launch()
       return
     }
-    // Need isolation: register the SW, then reload once. The flag reopens us afterward.
+    // Need isolation: register the SW and reload once it actually CONTROLS the page, so
+    // the reloaded document is served with the COEP/COOP headers (→ isolated). Reloading
+    // before control is established races and yields a non-isolated reload. The autoboot
+    // flag reopens the terminal after the reload.
     isolating = true
     try {
       sessionStorage.setItem(AUTOBOOT_KEY, '1')
-      await navigator.serviceWorker.register(SW_URL)
-      await navigator.serviceWorker.ready // wait for an active worker before reloading
-      location.reload()
+      if (navigator.serviceWorker.controller) {
+        location.reload() // already controlled → an immediate reload is isolated
+      } else {
+        // reload as soon as the freshly-activated SW claims this page
+        const reloadOnce = () => location.reload()
+        navigator.serviceWorker.addEventListener('controllerchange', reloadOnce, { once: true })
+        await navigator.serviceWorker.register(SW_URL)
+        // safety net: if control never establishes, open degraded instead of hanging
+        setTimeout(() => {
+          if (!navigator.serviceWorker.controller) {
+            navigator.serviceWorker.removeEventListener('controllerchange', reloadOnce)
+            sessionStorage.removeItem(AUTOBOOT_KEY)
+            isolating = false
+            launch()
+          }
+        }, 4000)
+      }
     } catch {
       sessionStorage.removeItem(AUTOBOOT_KEY)
       isolating = false
