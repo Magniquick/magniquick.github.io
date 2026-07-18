@@ -3,6 +3,10 @@ dist/
 # generated types
 .astro/
 
+# ./shell runtime assets — fetched/copied at build time by astro.config.mjs, never committed
+public/pyodide/
+public/coreutils.wasm
+
 # dependencies
 node_modules/
 

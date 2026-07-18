@@ -2,7 +2,10 @@
 import Base from '../layouts/Base.astro';
 import Window from '../components/Window.astro';
 import Lcd from '../components/Lcd.astro';
+import Badge88 from '../components/Badge88.astro';
+import ShellLauncher from '../components/shell/ShellLauncher.svelte';
 import { Icon } from 'astro-icon/components';
+import { Image } from 'astro:assets';
 import { getCollection } from 'astro:content';
 
 const base = import.meta.env.BASE_URL;
@@ -15,9 +18,11 @@ const fmt = (d: Date) => d.toLocaleDateString('en-CA'); // YYYY-MM-DD
 ---
 <Base>
   <header class="site rise">
-    <div class="pwd">$ pwd</div>
-    <div class="title">~/navon<span class="blink">_</span></div>
-    <div class="subtitle">kernel dev <b>·</b> ctf <b>·</b> machine learning</div>
+    <div class="hgroup">
+      <div class="pwd">HI, my name is:</div>
+      <div class="title"><span class="scramble" data-scramble data-cycle="Navon John Lukose|Magniquick" data-text="Navon John Lukose">Navon John Lukose</span><span class="blink">_</span></div>
+      <div class="subtitle">kernel dev <b>·</b> ctf <b>·</b> machine learning</div>
+    </div>
     <nav class="nav">
       <a href={base} aria-current="page">~/</a>
       <a href={`${base}blog`}>/blog</a>
@@ -26,11 +31,11 @@ const fmt = (d: Date) => d.toLocaleDateString('en-CA'); // YYYY-MM-DD
   </header>
 
   <main class="grid">
-    <!-- ================= LEFT ================= -->
-    <div class="col left">
+    <!-- ================= SIDEBAR — identity + secondary ================= -->
+    <aside class="col side">
       <Window name="navon@magniquick:~">
         <div class="who">
-          <img src="https://github.com/Magniquick.png" alt="Navon" />
+          <Image src="https://avatars.githubusercontent.com/u/67406856?v=4" alt="Navon" width={236} height={236} />
           <div class="meta">
             <div class="row">◢ Navon John Lukose</div>
             <div class="row">◈ CS · Manipal '28</div>
@@ -38,7 +43,7 @@ const fmt = (d: Date) => d.toLocaleDateString('en-CA'); // YYYY-MM-DD
             <div class="row">◇ he/him</div>
           </div>
         </div>
-        <div class="intro">&gt; hey, i'm navon. i make the<br />kernel go beep and watch<br />ctf flags fall. :3</div>
+        <div class="intro">&gt; CS undergrad working across the Linux kernel, security, and machine learning.</div>
       </Window>
 
       <Window name="ls /sys/class/links" bodyClass="pad links">
@@ -50,140 +55,38 @@ const fmt = (d: Date) => d.toLocaleDateString('en-CA'); // YYYY-MM-DD
           <Icon name="lucide:mail" size={20} aria-hidden="true" />
           <span>navonjohnlukose@gmail.com</span>
         </a>
-        <a href="tel:+917907925646">
-          <Icon name="lucide:phone" size={20} aria-hidden="true" />
-          <span>+91 79079 25646</span>
-        </a>
       </Window>
 
       <Window name="cat ~/.skills">
-<pre class="box"><span class="h">lang</span>     python · c · java · bash
-         pytorch · httpx · numpy
-<span class="h">tools</span>    git · qemu · burp · ida
-         docker · gh actions ci
-<span class="h">systems</span>  linux kernel build
-         hyprland · arch btw</pre>
-      </Window>
-
-      <Window name="ls ~/88x31">
-        <div class="btns">
-          <div class="b31 inv">MADE ON<br />GNU/LINUX</div>
-          <div class="b31">powered by<br /><b>coffee</b></div>
-          <div class="b31 err">no AI<br />slop*</div>
-          <div class="b31">arch<br />linux btw</div>
-          <div class="b31">hypr<br />land</div>
-          <div class="b31 inv">vim &gt;<br />emacs</div>
-          <div class="b31">best viewed<br />in a <b>tty</b></div>
-          <div class="b31">python<br />&amp; &lt;/&gt; C</div>
-        </div>
-        <div class="quote" style="font-size:11px">* mostly. it wrote this button.</div>
-      </Window>
-    </div>
-
-    <!-- ================= MIDDLE ================= -->
-    <div class="col mid">
-      <Window name="cat /etc/motd">
-        <span class="banner">FROM VULN RESEARCH<br />TO REINFORCEMENT LEARNING</span>
-        <p class="motd">
-          2nd-year B.Tech CS student at Manipal &amp; Linux kernel contributor
-          (mainline + stable). Head of the CTF team <span class="muted">PlayingG0d</span>
-          — a national #1 and international top-10s. Work spans kernel dev,
-          cybersecurity and ML: from crawling leaked keys to teaching a network
-          to play poker on a laptop GPU.
-        </p>
-        <div class="todo">// [now]
-- 2nd yr b.tech @ manipal institute of technology
-- iitm bs data science (online) — diploma level done
-- running ctf team playingg0d
-- rl that fits in 3mb, on hardware that doesn't cost 3 grand</div>
-        <p class="quote">&gt; this site is constantly evolving &lt;3</p>
-      </Window>
-
-      <Window name="cat ~/research/kuhn-poker.md">
-        <h3 class="k"># Solving Kuhn Poker with Double DQN</h3>
-        <p class="muted" style="margin:0 0 8px">
-          Summer research @ IIM Kozhikode w/ Prof. Mohammed Shahid Abdulla —
-          efficient RL on consumer-grade hardware.
-        </p>
-        <div class="rows">
-          <div class="r"><span class="l">Double DQN as a tractable alternative to CFR</span></div>
-          <div class="r"><span class="l">First working <a class="link" href="https://github.com/Magniquick/gym-kuhn-poker">Gymnasium env</a> for Kuhn Poker</span></div>
-          <div class="r"><span class="l">Nash-like strategies in 1–2 hrs on an MX250</span><span class="m accent">3 MB / pass</span></div>
-        </div>
-        <hr class="d" />
-        <div class="stats">
-          <div class="stat"><b><Lcd ghost="8-88">1-2h</Lcd></b><small>to converge</small></div>
-          <div class="stat"><b><Lcd ghost="888">3MB</Lcd></b><small>forward pass</small></div>
-          <div class="stat"><b>MX250</b><small>entry-level gpu</small></div>
-        </div>
-        <hr class="d" />
-        <div class="dim" style="font-size:13px">
-          → <a class="link" href="https://typst.app/project/rSMWAKD03peYDTGXp4Mzjr">paper</a> ·
-          <a class="link" href="https://github.com/Magniquick/reinforcement-learning">project</a>
-        </div>
-      </Window>
-
-      <Window name="git log --author=navon --community" bodyClass="pad rows">
-        <div class="r"><span class="l"><a class="link" href="https://github.com/System64fumo/syshud/pull/37">syshud #37</a></span><span class="m">kbd + backlight args</span></div>
-        <div class="r"><span class="l"><a class="link" href="https://github.com/vicinaehq/extensions/pull/66">vicinae/extensions #66</a></span><span class="m">swww fallback</span></div>
-        <div class="r"><span class="l"><a class="link" href="https://github.com/RayBytes/ChatMock/pull/72">ChatMock #72</a></span><span class="m">app compat</span></div>
-        <div class="r"><span class="l"><a class="link" href="https://github.com/TrueMyst/BeatPrints/pull/1">BeatPrints #1</a> · <a class="link" href="https://github.com/TrueMyst/BeatPrints/pull/2">#2</a></span><span class="m">cross-dir + errors</span></div>
-        <hr class="d" style="width:100%" />
-        <div class="r"><span class="l dim">mod @ Oh My Zsh discord</span><span class="m"><Lcd ghost="888">184</Lcd>k+ ★ project</span></div>
-      </Window>
-    </div>
-
-    <!-- ================= RIGHT ================= -->
-    <div class="col right">
-      <Window name="neofetch">
-        <div class="neo">
-<pre class="logo">   _____
-  / ._. \
- | |   | |
- | |mq | |
-  \_____/
-  |_____|</pre>
-          <div class="kv">
-            <div class="row"><span class="key">host</span><span class="val">magniquick</span></div>
-            <div class="row"><span class="key">os</span><span class="val">arch (cachyos)</span></div>
-            <div class="row"><span class="key">wm</span><span class="val">hyprland</span></div>
-            <div class="row"><span class="key">shell</span><span class="val">zsh + atuin</span></div>
-            <div class="row"><span class="key">term</span><span class="val">kitty</span></div>
-            <div class="row"><span class="key">editor</span><span class="val">nvim</span></div>
-            <div class="row"><span class="key">kernel</span><span class="val">contributor :3</span></div>
-            <div class="row"><span class="key">uptime</span><span class="val">2nd yr b.tech</span></div>
+        <div class="skills">
+          <span class="k">lang</span>
+          <div class="chips">
+            <span class="lchip"><Icon name="logos:python" /> python</span>
+            <span class="lchip"><Icon name="logos:c" /> c</span>
+            <span class="lchip"><Icon name="logos:java" /> java</span>
+            <span class="lchip"><Icon name="logos:bash-icon" /> bash</span>
+            <span class="lchip"><Icon name="logos:zsh" /> zsh</span>
           </div>
-        </div>
-        <div class="sw">
-          <span style="background:oklch(19% 0 0)"></span><span style="background:oklch(27% 0 0)"></span>
-          <span style="background:oklch(40% 0 0)"></span><span style="background:oklch(50% 0 0)"></span>
-          <span style="background:oklch(75% 0 0)"></span><span style="background:oklch(90% 0 0)"></span>
-          <span style="background:var(--accent)"></span>
-        </div>
-      </Window>
-
-      <Window name="git log ~/kernel">
-        <div class="dim" style="font-size:13px; margin-bottom:2px">Apr 2025 · v6.12 mainline + v5.10 stable</div>
-        <div class="muted">ALSA: hda/realtek: Add mute LED quirk for HP Pavilion x360 14-dy1xxx</div>
-<pre class="code"><span class="c">commit</span> <span class="a">b11a74ac4f54</span>
-<span class="c">Author:</span> Navon John Lukose
-  enable mute-LED support for
-  ALC295-based Pavilion convertibles</pre>
-        <div class="dim" style="font-size:13px; margin-top:8px">→ <a class="link" href="https://github.com/torvalds/linux/commit/b11a74ac4f545626d0dc95a8ca8c41df90532bf3">mainline commit</a></div>
-      </Window>
-
-      <Window name="./ctf --team PlayingG0d">
-        <div class="stats" style="justify-content:space-between">
-          <div class="stat"><b><Lcd ghost="88">#8</Lcd></b><small>NiteCTF '24 · intl</small></div>
-          <div class="stat"><b><Lcd ghost="88" acc>#1</Lcd></b><small>Citadel '25 · ₹7.5k</small></div>
-          <div class="stat"><b><Lcd ghost="88">#8</Lcd></b><small>NiteCTF '25 · intl</small></div>
-        </div>
-        <hr class="d" />
-        <span class="hblock">// authored</span>
-        <div class="rows">
-          <div class="r"><span class="l">Indomitus CTF <span class="dim">(MIST)</span></span><span class="m">stego · crypto</span></div>
-          <div class="r"><span class="l">LLM Token-Shift Cipher</span><span class="m">llama_cpp · gguf</span></div>
-          <div class="r"><span class="l">Polynomial-Gate Encoding</span><span class="m">torch · dill</span></div>
+          <span class="k">ml</span>
+          <div class="chips">
+            <span class="lchip"><Icon name="logos:pytorch-icon" /> pytorch</span>
+            <span class="lchip"><Icon name="logos:numpy" /> numpy</span>
+          </div>
+          <span class="k">tools</span>
+          <div class="chips">
+            <span class="lchip"><Icon name="logos:git-icon" /> git</span>
+            <span class="lchip"><Icon name="simple-icons:qemu" style="color:#FF6600" /> qemu</span>
+            <span class="lchip"><Icon name="simple-icons:burpsuite" style="color:#FF6633" /> burp</span>
+            <span class="lchip"><Icon name="lucide:binary" /> ida</span>
+            <span class="lchip"><Icon name="logos:docker-icon" /> docker</span>
+            <span class="lchip"><Icon name="logos:github-actions" /> gh actions</span>
+            <span class="lchip"><Icon name="simple-icons:hyprland" style="color:var(--accent)" /> hyprland</span>
+          </div>
+          <span class="k">systems</span>
+          <div class="chips">
+            <span class="lchip"><Icon name="logos:linux-tux" /> linux kernel</span>
+            <span class="lchip"><Icon name="logos:archlinux" /> arch</span>
+          </div>
         </div>
       </Window>
 
@@ -203,9 +106,141 @@ const fmt = (d: Date) => d.toLocaleDateString('en-CA'); // YYYY-MM-DD
         <div class="dim" style="font-size:13px; margin-top:10px">→ <a class="link" href={`${base}blog`}>all posts</a></div>
       </Window>
 
+      <Window name="ls ~/88x31">
+        <div class="btns">
+          <Badge88 src="/88x31/ultrakill.gif" alt="ULTRAKILL" href="https://store.steampowered.com/app/1229490/ULTRAKILL/" />
+          <Badge88 src="/88x31/gnu-linux.gif" alt="GNU/Linux" href="https://www.gnu.org/" />
+          <Badge88 src="/88x31/gpl3.gif" alt="GPL v3" href="https://www.gnu.org/licenses/gpl-3.0.html" />
+          <Badge88 src="/88x31/arch.gif" alt="Arch Linux" href="https://archlinux.org" />
+          <Badge88 src="/88x31/vscodium.gif" alt="VSCodium" href="https://vscodium.com/" />
+          <Badge88 src="/88x31/duck-tape.png" alt="Held together with Duck Tape!" />
+          <Badge88 src="/88x31/noclick.gif" alt="do not click" href="https://www.youtube.com/watch?v=dQw4w9WgXcQ" />
+          <Badge88 src="/88x31/absolutely.gif" alt="absolutely anything" />
+          <Badge88 src="/88x31/besteyes.gif" alt="Best Viewed With Eyes" />
+        </div>
+      </Window>
+
       <Window name="./shell --wasm">
-        <div class="dim" style="font-size:13px">micropython + wasm terminal</div>
-        <div class="muted" style="margin-top:4px">boot: <span class="accent">pending</span> — launches into a window here soon.</div>
+        <ShellLauncher client:idle />
+      </Window>
+    </aside>
+
+    <!-- ================= MAIN — the proof, in priority order ================= -->
+    <div class="col main">
+      <Window name="whoami">
+        <div class="proof" style="margin-bottom:14px">
+          <span class="proof-title">Navon John Lukose</span>
+          <span class="proof-tag">he/him</span>
+        </div>
+        <p class="motd">
+          2nd-year B.Tech CS student at Manipal &amp; Linux kernel contributor
+          (mainline + stable). Started the CTF team <span class="muted">PlayingG0d</span>
+          — a national #1 and international top-10s. Work spans kernel dev,
+          cybersecurity and ML: from crawling leaked keys to teaching a network
+          to play poker on a laptop GPU.
+        </p>
+        <div class="todo"><span class="now">// [now]</span>
+- 2nd yr b.tech @ manipal institute of technology
+- iitm bs data science (online) — diploma level done
+- rl that fits in 3mb, on hardware that doesn't cost 3 grand</div>
+      </Window>
+
+      <Window name="git log ~/kernel">
+        <div class="proof">
+          <span class="proof-title">Linux Kernel Contributor</span>
+          <span class="proof-tag">merged</span>
+        </div>
+        <div class="dim" style="font-size:13px; margin:2px 0 10px">Apr 2025 · landed in v6.12 mainline, backported to v5.10 stable</div>
+        <div class="muted">ALSA: hda/realtek: Add mute LED quirk for HP Pavilion x360 14-dy1xxx</div>
+<pre class="code"><span class="c">commit</span> <span class="a">b11a74ac4f54</span>
+<span class="c">Author:</span> Navon John Lukose
+  enable mute-LED support for
+  ALC295-based Pavilion convertibles</pre>
+        <div class="dim" style="font-size:13px; margin-top:8px">→ <a class="link" href="https://github.com/torvalds/linux/commit/b11a74ac4f545626d0dc95a8ca8c41df90532bf3">mainline commit</a></div>
+      </Window>
+
+      <Window name="./ctf --team PlayingG0d">
+        <div class="proof" style="margin-bottom:14px">
+          <span class="proof-title">CTF Track Record</span>
+          <span class="proof-tag">PlayingG0d</span>
+        </div>
+        <div class="stats" style="justify-content:space-between">
+          <div class="stat"><b>#8</b><small>NiteCTF '24 · intl</small></div>
+          <div class="stat"><b class="acc">#1</b><small>Citadel '25 · ₹7.5k</small></div>
+          <div class="stat"><b>#11</b><small>NiteCTF '25 · intl</small></div>
+        </div>
+        <hr class="d" />
+        <span class="hblock">// authored</span>
+        <div class="rows">
+          <div class="r"><span class="l">Indomitus CTF <span class="dim">(MIST)</span></span><span class="m">stego · crypto</span></div>
+          <div class="r"><span class="l">LLM Token-Shift Cipher</span><span class="m">llama_cpp · gguf</span></div>
+          <div class="r"><span class="l">Polynomial-Gate Encoding</span><span class="m">torch · dill</span></div>
+        </div>
+      </Window>
+
+      <Window name="cat ~/research/*.md">
+        <div class="proof" style="margin-bottom:14px">
+          <span class="proof-title">Research Internships</span>
+          <span class="proof-tag">NIT · IIM</span>
+        </div>
+        <div class="tabs">
+          <input class="tabin" type="radio" name="rtab" id="rtab-nit" />
+          <input class="tabin" type="radio" name="rtab" id="rtab-iim" checked />
+          <div class="tablist" role="tablist">
+            <label class="tab" for="rtab-nit">NIT</label>
+            <label class="tab" for="rtab-iim">IIM</label>
+          </div>
+
+          <!-- ===== NIT Calicut ===== -->
+          <div class="panel panel-nit">
+            <h3 class="k"># RBMs for the 2D Ising Model</h3>
+            <p class="muted" style="margin:0 0 8px">
+              Research internship @ NIT Calicut — restricted Boltzmann machines as a sampler
+              for the Ising model, toward a holography-inspired formulation.
+            </p>
+            <div class="rows">
+              <div class="r"><span class="l">RBM distribution validated against exact results at L=4</span></div>
+              <div class="r"><span class="l">softplus + rescaling stabilises the learned energy</span></div>
+              <div class="r"><span class="l">generative sampling of spin configurations</span><span class="m accent">in progress</span></div>
+            </div>
+            <hr class="d" />
+            <div class="dim" style="font-size:13px">tags: rbm · statistical mechanics · pytorch</div>
+          </div>
+
+          <!-- ===== IIM Kozhikode ===== -->
+          <div class="panel panel-iim">
+            <h3 class="k"># Solving Kuhn Poker with Double DQN</h3>
+            <p class="muted" style="margin:0 0 8px">
+              Summer research internship @ IIM Kozhikode w/ Prof. Mohammed Shahid Abdulla —
+              efficient RL on consumer-grade hardware.
+            </p>
+            <div class="rows">
+              <div class="r"><span class="l">Double DQN as a tractable alternative to CFR</span></div>
+              <div class="r"><span class="l">First working <a class="link" href="https://github.com/Magniquick/gym-kuhn-poker">Gymnasium env</a> for Kuhn Poker</span></div>
+              <div class="r"><span class="l">Nash-like strategies in 1–2 hrs on an MX250</span></div>
+            </div>
+            <hr class="d" />
+            <div class="dim" style="font-size:13px">
+              → <a class="link" href="https://typst.app/project/rSMWAKD03peYDTGXp4Mzjr">paper</a> ·
+              <a class="link" href="https://github.com/Magniquick/reinforcement-learning">project</a>
+            </div>
+          </div>
+        </div>
+      </Window>
+
+      <Window name="git log --author=navon --community" bodyClass="pad">
+        <div class="proof" style="margin-bottom:14px">
+          <span class="proof-title">Open Source</span>
+          <span class="proof-tag">contributor + moderator</span>
+        </div>
+        <div class="rows">
+        <div class="r"><span class="l"><a class="link" href="https://github.com/System64fumo/syshud/pull/37">syshud #37</a></span><span class="m">kbd + backlight args</span></div>
+        <div class="r"><span class="l"><a class="link" href="https://github.com/vicinaehq/extensions/pull/66">vicinae/extensions #66</a></span><span class="m">swww fallback</span></div>
+        <div class="r"><span class="l"><a class="link" href="https://github.com/RayBytes/ChatMock/pull/72">ChatMock #72</a></span><span class="m">app compat</span></div>
+        <div class="r"><span class="l"><a class="link" href="https://github.com/TrueMyst/BeatPrints/pull/1">BeatPrints #1</a> · <a class="link" href="https://github.com/TrueMyst/BeatPrints/pull/2">#2</a></span><span class="m">cross-dir + errors</span></div>
+        <hr class="d" style="width:100%" />
+        <div class="r"><span class="l dim">mod @ Oh My Zsh discord</span><span class="m"><Lcd ghost="888">184</Lcd>k+ ★ project</span></div>
+        </div>
       </Window>
     </div>
   </main>

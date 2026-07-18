@@ -1,11 +1,12 @@
 ---
 import '@fontsource/vt323'; // display (400 only)
+import '@fontsource/geist-mono/600.css'; // hero wordmark
+import '@fontsource/geist-mono/700.css';
 import '@fontsource/ibm-plex-mono/400.css';
 import '@fontsource/ibm-plex-mono/500.css';
 import '@fontsource/ibm-plex-mono/600.css';
 import '../styles/global.css';
 import { ClientRouter } from 'astro:transitions';
-import ThemeHud from '../components/ThemeHud.astro';
 
 interface Props { title?: string; description?: string; }
 const {
@@ -20,24 +21,19 @@ const base = import.meta.env.BASE_URL; // '/' at root, '/repo/' under a project 
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Cross-origin isolation shim so the ./shell terminal's pyodide can use
+       SharedArrayBuffer on GitHub Pages (which can't set COEP/COOP headers).
+       Registers a service worker and reloads once on a visitor's first load. -->
+  <script src={`${base}coi-serviceworker.js`} is:inline></script>
   <title>{title}</title>
   <meta name="description" content={description} />
   <link rel="icon" href={`${base}favicon.svg`} type="image/svg+xml" />
   <link rel="alternate" type="application/rss+xml" title="navon — /blog" href={`${base}rss.xml`} />
   <meta name="generator" content={Astro.generator} />
   <ClientRouter />
-  <!-- apply saved theme before paint to avoid a flash -->
-  <script is:inline>
-    (function () {
-      try {
-        if (localStorage.getItem('accent') === 'cyan') document.documentElement.dataset.accent = 'cyan';
-      } catch (e) {}
-    })();
-  </script>
 </head>
 <body>
   <slot />
-  <ThemeHud />
 
   <!-- SPA nav via ClientRouter → re-init each astro:page-load (fires on first load too) -->
   <script>
@@ -50,44 +46,51 @@ const base = import.meta.env.BASE_URL; // '/' at root, '/repo/' under a project 
       });
     }
 
-    function initHud() {
-      const root = document.documentElement;
-      const accBtns = document.querySelectorAll<HTMLButtonElement>('.hud [data-acc]');
-
-      const cur = () => (root.dataset.accent === 'cyan' ? 'cyan' : 'amber');
-      const syncAccent = () =>
-        accBtns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.acc === cur())));
-
-      accBtns.forEach((b) =>
-        b.addEventListener('click', () => {
-          if (b.dataset.acc === 'cyan') root.dataset.accent = 'cyan';
-          else root.removeAttribute('data-accent');
-          try { localStorage.setItem('accent', b.dataset.acc!); } catch {}
-          syncAccent();
-        })
-      );
-      syncAccent();
-    }
-
-    // single clock interval; always writes to whichever #clk currently exists
-    let clockStarted = false;
-    function initClock() {
-      if (clockStarted) return;
-      clockStarted = true;
-      const p = (n: number) => String(n).padStart(2, '0');
+    // text scramble / "decode" effect (Hyperplexed-style) for [data-scramble]
+    const SC_CHARS = '!#$%*+=?-_/\\|[]{}^~:;.,';
+    function scrambleEl(el: HTMLElement, text: string, scale = 1) {
+      const q = [] as { to: string; end: number; char: string }[];
+      for (let i = 0; i < text.length; i++) {
+        const start = Math.floor(Math.random() * 12 * scale);
+        q.push({ to: text[i], end: start + Math.floor((10 + Math.random() * 16) * scale), char: '' });
+      }
+      let frame = 0;
+      cancelAnimationFrame((el as any)._sc);
       const tick = () => {
-        const c = document.getElementById('clk');
-        if (!c) return;
-        const d = new Date();
-        c.textContent = `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+        let out = '';
+        let done = 0;
+        for (const item of q) {
+          if (frame >= item.end) { done++; out += item.to; }
+          else {
+            if (!item.char || Math.random() < 0.28) item.char = SC_CHARS[Math.floor(Math.random() * SC_CHARS.length)];
+            out += '<span class="dud">' + item.char + '</span>';
+          }
+        }
+        el.innerHTML = out;
+        frame++;
+        if (done < q.length) (el as any)._sc = requestAnimationFrame(tick);
       };
       tick();
-      setInterval(tick, 1000);
     }
 
-    // single clock interval survives navs (initClock is guarded); it always writes
-    // to whichever #clk currently exists, so the time doesn't reset on nav.
-    document.addEventListener('astro:page-load', () => { initRise(); initHud(); initClock(); });
+    function initScramble() {
+      document.querySelectorAll<HTMLElement>('[data-scramble]').forEach((el) => {
+        const words = el.dataset.cycle ? el.dataset.cycle.split('|') : [el.dataset.text ?? el.textContent ?? ''];
+        if (reduce) { el.textContent = words[0]; return; }
+        if (!el.dataset.scBound) {
+          el.dataset.scBound = '1';
+          (el as any)._wi = 0;
+          el.addEventListener('mouseenter', () => {
+            (el as any)._wi = ((el as any)._wi + 1) % words.length;
+            scrambleEl(el, words[(el as any)._wi], 1.5); // hover: cycle + slower decode
+          });
+        }
+        (el as any)._wi = 0;
+        scrambleEl(el, words[0]); // decode-in on load
+      });
+    }
+
+    document.addEventListener('astro:page-load', () => { initRise(); initScramble(); });
   </script>
 
   <!-- oneko pixel-cat pet (self-disables under reduced-motion); recreated per nav -->

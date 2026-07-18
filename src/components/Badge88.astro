@@ -1,0 +1,16 @@
+---
+// An 88x31 image badge for the ~/88x31 wall. Renders a link if `href` is given.
+interface Props {
+  src: string;
+  alt: string;
+  href?: string;
+}
+const { src, alt, href } = Astro.props;
+const Tag = href ? 'a' : 'span';
+---
+<Tag
+  class="b31 b31img"
+  {...href ? { href, target: '_blank', rel: 'noopener noreferrer' } : {}}
+>
+  <img src={src} alt={alt} width="88" height="31" loading="lazy" decoding="async" />
+</Tag>

@@ -21,20 +21,23 @@
   --txt-4: oklch(40% 0 0);
   --line: oklch(34% 0 0);
 
-  /* accent — amber default (pulled from hybrid-dark). deuteranopia-safe. */
-  --accent: oklch(82% 0.14 80);
-  --accent-2: oklch(70% 0.13 78);
+  /* accent — cyan (single, fixed accent) */
+  --accent: oklch(80% 0.11 210);
+  --accent-2: oklch(68% 0.11 212);
+  /* secondary pop — warm yellow, used sparingly (e.g. // [now]) */
+  --yellow: oklch(84% 0.15 92);
 
   --mono:"IBM Plex Mono", ui-monospace, "JetBrains Mono", Menlo, monospace;
   --term:"VT323", ui-monospace, monospace;
+  --hero:"Geist Mono", ui-monospace, monospace;
   --seg:"DSEG7","VT323", monospace;
   --seg-ghost: color-mix(in srgb, var(--txt-1) 12%, transparent);
 
-  --maxw:1180px;
+  --pad:24px;
+  /* wrap width = sidebar 340 + gap 12 + main 820, plus the side padding.
+     header / grid / footer all use --maxw so their left edges line up. */
+  --maxw:calc(1172px + 2 * var(--pad));
 }
-
-/* alt accent (cyan) — toggled via <html data-accent> (see ThemeHud) */
-:root[data-accent="cyan"]{ --accent: oklch(80% 0.11 210); --accent-2: oklch(68% 0.11 212); }
 
 /* native cross-document view transitions — zero JS; browsers without support
    just do an instant navigation. */
@@ -70,21 +73,27 @@ a.link:hover{color:var(--accent); border-bottom-color:var(--accent)}
 }
 
 /* ---- header ---- */
-header.site{max-width:var(--maxw); margin:0 auto; padding:40px 0 26px; text-align:center}
+header.site{max-width:var(--maxw); margin:0 auto; padding:40px var(--pad) 26px; text-align:left;
+  display:flex; justify-content:space-between; align-items:flex-start; gap:24px}
 .pwd{font-family:var(--term); font-size:20px; color:var(--txt-3)}
-.title{font-family:var(--term); font-size:clamp(44px,8vw,76px); line-height:.9; color:var(--txt-1); letter-spacing:1px; margin-top:2px;}
+.title{font-family:var(--hero); font-weight:700; font-size:clamp(40px,7vw,68px); line-height:.95; color:var(--txt-1); letter-spacing:-.03em; margin-top:2px;}
+.title .scramble{cursor:default}
+.title .dud{color:var(--accent)}
 .subtitle{font-family:var(--term); font-size:22px; color:var(--txt-2); margin-top:8px}
 .subtitle b{color:var(--accent); font-weight:400}
-.nav{margin-top:10px; font-size:13px; color:var(--txt-3); display:flex; gap:14px; justify-content:center}
+.nav{margin-top:0; font-size:15px; color:var(--txt-3); display:flex; flex-direction:column; align-items:flex-end; gap:8px; flex:0 0 auto; align-self:flex-end}
 .nav a{color:var(--txt-2)} .nav a[aria-current]{color:var(--accent)}
 
 /* ---- bento columns ---- */
-.grid{max-width:var(--maxw); margin:0 auto; display:flex; gap:12px; align-items:flex-start; justify-content:center}
+.grid{max-width:var(--maxw); margin:0 auto; padding-inline:var(--pad); display:flex; gap:12px; align-items:flex-start; justify-content:center}
 .col{display:flex; flex-direction:column; gap:12px; min-width:0}
-.col.left{flex:0 1 320px}
-.col.mid{flex:0 1 460px}
-.col.right{flex:0 1 340px}
-@media (max-width:1000px){ .grid{flex-direction:column; align-items:stretch; max-width:560px} .col{flex:1 1 auto} }
+.col.side{flex:0 1 340px}
+.col.main{flex:1 1 auto; max-width:820px}
+@media (max-width:900px){
+  .grid{flex-direction:column; align-items:stretch; max-width:640px} .col{flex:1 1 auto} .col.main{max-width:none}
+  header.site{flex-direction:column; align-items:stretch; max-width:640px}
+  .nav{flex-direction:row; align-items:flex-start; margin-top:6px}
+}
 
 /* ---- window ---- */
 .win{border:1px solid var(--line); border-radius:5px; background:transparent; transition:border-color .18s}
@@ -114,12 +123,31 @@ hr.d{border:0; border-top:1px dashed var(--line); margin:12px 0}
 .who .meta .row{display:flex; gap:8px; color:var(--txt-2)}
 .who .intro{font-family:var(--mono); font-size:13.5px; line-height:1.55; color:var(--txt-1); margin-top:10px}
 
-/* motd banner */
-.banner{ display:block; background:var(--txt-1); color:var(--bg-1); font-family:var(--term); font-size:clamp(26px,4.6vw,40px); text-align:center; padding:12px 10px; letter-spacing:1px; position:relative; overflow:hidden; }
-.banner::after{ content:""; position:absolute; inset:0; pointer-events:none; opacity:.22; background-image:repeating-linear-gradient(to bottom, transparent 0 2px, var(--bg-1) 2px 3px); }
-.motd{font-size:14px; color:var(--txt-2); margin-top:14px}
-.todo{font-family:var(--mono); color:var(--txt-2); white-space:pre-wrap; margin:10px 0 0}
+.motd{font-size:14px; color:var(--txt-2); margin-top:0}
+.todo{font-family:var(--mono); color:var(--txt-2); white-space:pre-wrap; margin:14px 0 0; padding-left:12px;
+  border-left:2px solid color-mix(in srgb, var(--yellow) 60%, transparent)}
+.todo .now{color:var(--yellow); font-weight:600}
 .quote{color:var(--txt-3); font-style:italic; margin-top:12px}
+
+/* kernel window — lead with the credential */
+.proof{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+.proof-title{font-family:var(--mono); font-weight:600; font-size:19px; line-height:1.1; color:var(--accent); letter-spacing:-.01em}
+.proof-tag{font-family:var(--mono); font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--accent-2);
+  border:1px solid var(--accent-2); border-radius:20px; padding:2px 9px}
+
+/* CSS-only tabs (research: NIT / IIM) */
+.tabs > .tabin{position:absolute; width:1px; height:1px; opacity:0; pointer-events:none}
+.tablist{display:flex; gap:10px; margin-bottom:16px}
+.tab{flex:1 1 0; text-align:center; padding:9px 12px; cursor:pointer;
+  font-family:var(--term); font-size:24px; line-height:1; letter-spacing:1px;
+  color:var(--txt-3); background:var(--bg-2); border:1px solid var(--line); border-radius:6px; transition:.15s}
+.tab:hover{color:var(--txt-1); border-color:var(--txt-3)}
+#rtab-nit:checked ~ .tablist label[for="rtab-nit"],
+#rtab-iim:checked ~ .tablist label[for="rtab-iim"]{color:var(--accent); border-color:var(--accent); background:var(--bg-3)}
+.tabin:focus-visible ~ .tablist label{outline:2px solid var(--accent); outline-offset:2px}
+.panel{display:none}
+#rtab-nit:checked ~ .panel-nit{display:block}
+#rtab-iim:checked ~ .panel-iim{display:block}
 
 /* generic list rows */
 .rows{display:flex; flex-direction:column; gap:9px}
@@ -131,6 +159,14 @@ hr.d{border:0; border-top:1px dashed var(--line); margin:12px 0}
 .desc{color:var(--txt-3); font-size:13px; margin-top:2px}
 .prj{padding:2px 0}
 
+/* skills window — logo chips grouped by category */
+.skills{display:grid; grid-template-columns:64px 1fr; gap:12px 12px; align-items:start}
+.skills .k{color:var(--accent); font-size:12.5px; padding-top:5px}
+.chips{display:flex; flex-wrap:wrap; gap:6px}
+.lchip{display:inline-flex; align-items:center; gap:7px; font-size:12.5px; color:var(--txt-1);
+  background:var(--bg-3); border:1px solid var(--line); border-radius:6px; padding:4px 10px 4px 8px; line-height:1.3}
+.lchip svg{width:15px; height:15px; flex:0 0 auto}
+
 /* links window */
 .links{display:flex; flex-direction:column; gap:12px}
 .links a{display:flex; align-items:center; gap:11px; color:var(--txt-1); transition:opacity .15s}
@@ -138,21 +174,10 @@ hr.d{border:0; border-top:1px dashed var(--line); margin:12px 0}
 .links svg{width:20px; height:20px} /* icons inherit currentColor from the link */
 .links .h{color:var(--txt-3)}
 
-/* neofetch */
-.neo{display:flex; gap:16px}
-.neo pre.logo{margin:0; color:var(--accent); font-size:11px; line-height:1.15}
-.neo .kv{font-size:13.5px}
-.neo .kv .row{display:flex; gap:8px}
-.neo .kv .key{color:var(--accent); width:74px; flex:0 0 auto}
-.neo .kv .val{color:var(--txt-2)}
-.sw{display:flex; gap:0; margin-top:8px}
-.sw span{width:15px; height:15px}
-
 /* stats/ctf big numbers */
 .stats{display:flex; gap:18px; flex-wrap:wrap}
-.stat{font-family:var(--term)}
-.stat b{display:block; font-size:38px; line-height:1; color:var(--txt-1)}
-.stat b .lcd{font-size:38px; line-height:1}
+.stat b{display:block; font-family:var(--hero); font-weight:700; font-size:34px; line-height:1; letter-spacing:-.02em; color:var(--txt-1)}
+.stat b.acc{color:var(--accent)}
 .stat small{color:var(--txt-3); font-size:14px; display:block; margin-top:3px}
 
 /* code snippet */
@@ -166,22 +191,15 @@ pre.code .a{color:var(--accent)}
 .b31.inv{background:var(--txt-1); color:var(--bg-1)}
 .b31.err{border-color:var(--accent); color:var(--accent)}
 .b31 b{color:var(--accent)}
+/* image badge variant — the gif carries its own art, so no chrome/padding */
+.b31img{padding:0; border:0; background:none; line-height:0; overflow:hidden}
+.b31img img{width:88px; height:31px; display:block; image-rendering:pixelated}
 
 /* skills box */
 pre.box{margin:0; color:var(--txt-2); font-size:12.5px; line-height:1.45; white-space:pre; overflow-x:auto}
 pre.box .h{color:var(--txt-1)}
 
-footer.site{max-width:var(--maxw); margin:26px auto 0; text-align:center; color:var(--txt-3); font-size:13px}
-
-/* ---- theme HUD (accent toggle + live clock) ---- */
-.hud{ position:fixed; right:14px; bottom:12px; z-index:1200; display:flex; align-items:center; gap:8px;
-  padding:6px 9px; border:1px solid var(--line); border-radius:6px; background:color-mix(in srgb,var(--bg-1) 86%,transparent); backdrop-filter:blur(3px); }
-.hud button{ font-family:var(--mono); font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--txt-3);
-  background:transparent; border:1px solid var(--line); border-radius:4px; padding:3px 7px; cursor:pointer; transition:.15s }
-.hud button:hover{border-color:var(--accent); color:var(--accent)}
-.hud button[aria-pressed="true"]{border-color:var(--accent); color:var(--accent)}
-.hud .sep2{width:1px; height:16px; background:var(--line)}
-.hud .clk{font-family:var(--seg); font-size:15px; color:var(--accent); letter-spacing:1px}
+footer.site{max-width:var(--maxw); margin:26px auto 0; padding-inline:var(--pad); text-align:center; color:var(--txt-3); font-size:13px}
 
 /* ============================================================
    blog — post list + prose
