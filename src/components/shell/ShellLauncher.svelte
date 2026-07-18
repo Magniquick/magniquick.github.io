@@ -13,10 +13,26 @@
 
   const SW_URL = `${import.meta.env.BASE_URL}coi-serviceworker.js`
   const AUTOBOOT_KEY = 'shell:autoboot'
+  const DBG_KEY = 'shell:dbg'
 
   let launched = $state(false) // has the terminal ever been booted (kept mounted after)
   let open = $state(false) // is the overlay currently visible
   let isolating = $state(false) // registering SW + about to reload
+
+  // TEMP diagnostics: breadcrumbs into sessionStorage so they survive reloads.
+  function dbg(event: string, extra: Record<string, unknown> = {}) {
+    try {
+      const arr = JSON.parse(sessionStorage.getItem(DBG_KEY) || '[]')
+      arr.push({
+        event,
+        iso: window.crossOriginIsolated,
+        ctrl: !!(navigator.serviceWorker && navigator.serviceWorker.controller),
+        flag: sessionStorage.getItem(AUTOBOOT_KEY),
+        ...extra,
+      })
+      sessionStorage.setItem(DBG_KEY, JSON.stringify(arr))
+    } catch {}
+  }
 
   function launch() {
     launched = true
@@ -24,9 +40,7 @@
   }
 
   async function boot() {
-    // Already isolated (returning visitor whose SW controls the page, or dev headers),
-    // or isolation isn't achievable here → just open. Without SAB the shell still runs;
-    // only Ctrl-C interrupt of a running python is unavailable.
+    dbg('boot-click')
     if (
       window.crossOriginIsolated ||
       !window.isSecureContext ||
@@ -35,44 +49,28 @@
       launch()
       return
     }
-    // Need isolation: register the SW and reload once it actually CONTROLS the page, so
-    // the reloaded document is served with the COEP/COOP headers (→ isolated). Reloading
-    // before control is established races and yields a non-isolated reload. The autoboot
-    // flag reopens the terminal after the reload.
     isolating = true
+    sessionStorage.setItem(AUTOBOOT_KEY, '1')
     try {
-      sessionStorage.setItem(AUTOBOOT_KEY, '1')
-      if (navigator.serviceWorker.controller) {
-        location.reload() // already controlled → an immediate reload is isolated
-      } else {
-        // reload as soon as the freshly-activated SW claims this page
-        const reloadOnce = () => location.reload()
-        navigator.serviceWorker.addEventListener('controllerchange', reloadOnce, { once: true })
-        await navigator.serviceWorker.register(SW_URL)
-        // safety net: if control never establishes, open degraded instead of hanging
-        setTimeout(() => {
-          if (!navigator.serviceWorker.controller) {
-            navigator.serviceWorker.removeEventListener('controllerchange', reloadOnce)
-            sessionStorage.removeItem(AUTOBOOT_KEY)
-            isolating = false
-            launch()
-          }
-        }, 4000)
-      }
-    } catch {
+      const reg = await navigator.serviceWorker.register(SW_URL)
+      dbg('registered', { active: !!reg.active, installing: !!reg.installing, waiting: !!reg.waiting })
+      await navigator.serviceWorker.ready
+      dbg('ready-reload')
+      location.reload()
+    } catch (e) {
+      dbg('boot-error', { e: String(e) })
       sessionStorage.removeItem(AUTOBOOT_KEY)
       isolating = false
-      launch() // fall back to a non-isolated (no Ctrl-C) session
+      launch()
     }
   }
 
   onMount(() => {
-    // Came back from the isolation reload → reopen automatically (isolated if the SW now
-    // controls us; degraded otherwise — never reload again, to avoid a loop).
-    if (sessionStorage.getItem(AUTOBOOT_KEY)) {
-      sessionStorage.removeItem(AUTOBOOT_KEY)
-      launch()
-    }
+    dbg('onMount')
+    if (!sessionStorage.getItem(AUTOBOOT_KEY)) return
+    sessionStorage.removeItem(AUTOBOOT_KEY)
+    dbg('onMount-launch')
+    launch()
   })
 
   function close() {
