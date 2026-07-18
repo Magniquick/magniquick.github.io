@@ -12,27 +12,16 @@
   import Terminal from './Terminal.svelte'
 
   const SW_URL = `${import.meta.env.BASE_URL}coi-serviceworker.js`
+  // localStorage, NOT sessionStorage: gaining cross-origin isolation (COOP: same-origin)
+  // swaps the browsing-context group and hands the reloaded page a fresh sessionStorage,
+  // wiping the flag exactly when isolation succeeds. localStorage is per-origin and
+  // survives the swap. The timestamp lets us ignore a stale flag on a later visit.
   const AUTOBOOT_KEY = 'shell:autoboot'
-  const DBG_KEY = 'shell:dbg'
+  const AUTOBOOT_TTL = 30_000
 
   let launched = $state(false) // has the terminal ever been booted (kept mounted after)
   let open = $state(false) // is the overlay currently visible
   let isolating = $state(false) // registering SW + about to reload
-
-  // TEMP diagnostics: breadcrumbs into sessionStorage so they survive reloads.
-  function dbg(event: string, extra: Record<string, unknown> = {}) {
-    try {
-      const arr = JSON.parse(sessionStorage.getItem(DBG_KEY) || '[]')
-      arr.push({
-        event,
-        iso: window.crossOriginIsolated,
-        ctrl: !!(navigator.serviceWorker && navigator.serviceWorker.controller),
-        flag: sessionStorage.getItem(AUTOBOOT_KEY),
-        ...extra,
-      })
-      sessionStorage.setItem(DBG_KEY, JSON.stringify(arr))
-    } catch {}
-  }
 
   function launch() {
     launched = true
@@ -40,7 +29,9 @@
   }
 
   async function boot() {
-    dbg('boot-click')
+    // Already isolated (returning visitor whose SW controls the page, or dev headers),
+    // or isolation isn't achievable here → just open. Without SAB the shell still runs;
+    // only Ctrl-C interrupt of a running python is unavailable.
     if (
       window.crossOriginIsolated ||
       !window.isSecureContext ||
@@ -49,28 +40,26 @@
       launch()
       return
     }
+    // Register the coi SW, then reload once it's active. That reload is served through the
+    // SW with COEP/COOP → isolated; the autoboot flag (in localStorage) reopens us after.
     isolating = true
-    sessionStorage.setItem(AUTOBOOT_KEY, '1')
+    localStorage.setItem(AUTOBOOT_KEY, String(Date.now()))
     try {
-      const reg = await navigator.serviceWorker.register(SW_URL)
-      dbg('registered', { active: !!reg.active, installing: !!reg.installing, waiting: !!reg.waiting })
+      await navigator.serviceWorker.register(SW_URL)
       await navigator.serviceWorker.ready
-      dbg('ready-reload')
       location.reload()
-    } catch (e) {
-      dbg('boot-error', { e: String(e) })
-      sessionStorage.removeItem(AUTOBOOT_KEY)
+    } catch {
+      localStorage.removeItem(AUTOBOOT_KEY)
       isolating = false
-      launch()
+      launch() // fall back to a non-isolated (no Ctrl-C) session
     }
   }
 
   onMount(() => {
-    dbg('onMount')
-    if (!sessionStorage.getItem(AUTOBOOT_KEY)) return
-    sessionStorage.removeItem(AUTOBOOT_KEY)
-    dbg('onMount-launch')
-    launch()
+    const raw = localStorage.getItem(AUTOBOOT_KEY)
+    if (!raw) return
+    localStorage.removeItem(AUTOBOOT_KEY)
+    if (Date.now() - Number(raw) < AUTOBOOT_TTL) launch() // just came back from the reload
   })
 
   function close() {
