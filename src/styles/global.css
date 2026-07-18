@@ -92,7 +92,7 @@ header.site{max-width:var(--maxw); margin:0 auto; padding:40px var(--pad) 26px; 
 @media (max-width:900px){
   .grid{flex-direction:column; align-items:stretch; max-width:640px} .col{flex:1 1 auto} .col.main{max-width:none}
   header.site{flex-direction:column; align-items:stretch; max-width:640px}
-  .nav{flex-direction:row; align-items:flex-start; margin-top:6px}
+  .nav{flex-direction:row; align-items:flex-start; align-self:flex-start; margin-top:6px}
 }
 
 /* ---- window ---- */
@@ -231,3 +231,23 @@ footer.site{max-width:var(--maxw); margin:26px auto 0; padding-inline:var(--pad)
 .posthead .meta time{font-family:var(--seg); color:var(--accent)}
 .backlink{color:var(--txt-3); font-size:13px; display:inline-block; margin-bottom:20px}
 .backlink:hover{color:var(--accent)}
+
+/* ./shell terminal chrome — lives here (not in Terminal.svelte) because Astro drops a
+   runtime-only nested island child's scoped CSS under inlineStylesheets:'always'. The
+   .term* classes are unique to the terminal, so plain (unscoped) rules are safe. */
+.term{display:flex; flex-direction:column; height:100%; min-height:0; background:#191919}
+.term-actions{display:flex; align-items:center; gap:10px; padding:7px 12px; border-bottom:1px solid var(--line); font-family:var(--mono); font-size:12px; color:var(--txt-3)}
+.term-actions .spacer{flex:1}
+.term-actions .dot{width:8px; height:8px; border-radius:50%; background:var(--txt-3)}
+.term-actions .dot[data-state="ready"]{background:#58e1ff}
+.term-actions .dot[data-state="running"]{background:oklch(84% 0.15 92)}
+.term-actions .dot[data-state="fatal"]{background:oklch(64% 0.2 25)}
+.term-actions .status{color:var(--txt-2)}
+.term-actions button{font:inherit; color:var(--txt-3); background:transparent; border:1px solid var(--line); border-radius:5px; padding:2px 9px; cursor:pointer}
+.term-actions button:hover,.term-actions button.active{color:#58e1ff; border-color:#58e1ff}
+.term-host{flex:1; min-height:0; padding:8px 6px 6px 10px; overflow:hidden}
+.term-host .xterm{height:100%}
+.term-search{display:flex; align-items:center; gap:8px; padding:7px 12px; border-top:1px solid var(--line); font-family:var(--mono); font-size:12.5px}
+.term-search .p{color:#58e1ff}
+.term-search input{flex:1; font:inherit; color:var(--txt-1); background:transparent; border:none; outline:none}
+.term-search button{font:inherit; color:var(--txt-3); background:transparent; border:1px solid var(--line); border-radius:5px; padding:2px 9px; cursor:pointer}
