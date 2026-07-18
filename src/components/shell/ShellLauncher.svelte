@@ -12,12 +12,12 @@
   import Terminal from './Terminal.svelte'
 
   const SW_URL = `${import.meta.env.BASE_URL}coi-serviceworker.js`
-  // localStorage, NOT sessionStorage: gaining cross-origin isolation (COOP: same-origin)
-  // swaps the browsing-context group and hands the reloaded page a fresh sessionStorage,
-  // wiping the flag exactly when isolation succeeds. localStorage is per-origin and
-  // survives the swap. The timestamp lets us ignore a stale flag on a later visit.
-  const AUTOBOOT_KEY = 'shell:autoboot'
-  const AUTOBOOT_TTL = 30_000
+  // The autoboot signal rides the URL HASH, not Web Storage. Gaining cross-origin
+  // isolation (COOP: same-origin) swaps the browsing-context group, which resets BOTH
+  // session- and localStorage on the very reload that grants isolation — so a stored flag
+  // is wiped exactly when it's needed. The hash survives the reload and the context swap.
+  const HASH_RE = /shellboot=(\d+)/
+  const MAX_TRIES = 3 // SW isolation is a multi-navigation handshake; bound the reloads
 
   let launched = $state(false) // has the terminal ever been booted (kept mounted after)
   let open = $state(false) // is the overlay currently visible
@@ -26,6 +26,10 @@
   function launch() {
     launched = true
     open = true
+  }
+
+  function stripBootHash() {
+    history.replaceState(null, '', location.pathname + location.search)
   }
 
   async function boot() {
@@ -40,29 +44,32 @@
       launch()
       return
     }
-    // Register the coi SW, then reload once it's active. That reload is served through the
-    // SW with COEP/COOP → isolated; the autoboot flag (in localStorage) reopens us after.
+    // Register the coi SW, then start the reload handshake carrying the signal in the hash.
     isolating = true
-    localStorage.setItem(AUTOBOOT_KEY, String(Date.now()))
-    console.log('[shelldbg] boot set flag', { ls: localStorage.getItem(AUTOBOOT_KEY), iso: window.crossOriginIsolated })
     try {
       await navigator.serviceWorker.register(SW_URL)
       await navigator.serviceWorker.ready
-      console.log('[shelldbg] reloading', { ls: localStorage.getItem(AUTOBOOT_KEY) })
-      location.reload()
+      location.hash = 'shellboot=1'
+      location.reload() // preserves the hash
     } catch {
-      localStorage.removeItem(AUTOBOOT_KEY)
       isolating = false
       launch() // fall back to a non-isolated (no Ctrl-C) session
     }
   }
 
   onMount(() => {
-    const raw = localStorage.getItem(AUTOBOOT_KEY)
-    console.log('[shelldbg] onMount', { ls: raw, ss: sessionStorage.getItem(AUTOBOOT_KEY), iso: window.crossOriginIsolated, ctrl: !!(navigator.serviceWorker && navigator.serviceWorker.controller), href: location.href })
-    if (!raw) return
-    localStorage.removeItem(AUTOBOOT_KEY)
-    if (Date.now() - Number(raw) < AUTOBOOT_TTL) launch() // just came back from the reload
+    const match = location.hash.match(HASH_RE)
+    if (!match) return // ordinary load, not an autoboot cycle
+    const tries = Number(match[1])
+    // Done when isolated (success) or we've exhausted the handshake (open degraded).
+    if (window.crossOriginIsolated || tries >= MAX_TRIES) {
+      stripBootHash()
+      launch()
+      return
+    }
+    // Not isolated yet — the SW needs another navigation to control+isolate this page.
+    location.hash = `shellboot=${tries + 1}`
+    location.reload()
   })
 
   function close() {
