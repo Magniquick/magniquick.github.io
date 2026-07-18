@@ -56,6 +56,7 @@ const base = import.meta.env.BASE_URL; // '/' at root, '/repo/' under a project 
       }
       let frame = 0;
       cancelAnimationFrame((el as any)._sc);
+      (el as any)._animating = true; // lock: cleared when the decode completes below
       const tick = () => {
         let out = '';
         let done = 0;
@@ -69,6 +70,7 @@ const base = import.meta.env.BASE_URL; // '/' at root, '/repo/' under a project 
         el.innerHTML = out;
         frame++;
         if (done < q.length) (el as any)._sc = requestAnimationFrame(tick);
+        else (el as any)._animating = false;
       };
       tick();
     }
@@ -81,10 +83,10 @@ const base = import.meta.env.BASE_URL; // '/' at root, '/repo/' under a project 
           el.dataset.scBound = '1';
           (el as any)._wi = 0;
           const cycle = () => {
-            // debounce so a touch's synthetic mouseenter+click fires the cycle once
-            const now = performance.now();
-            if (now - ((el as any)._lastCyc ?? 0) < 400) return;
-            (el as any)._lastCyc = now;
+            // ignore triggers mid-decode: a length change resizes the box under the
+            // pointer, refiring mouseenter → a cascade that flips back. This lock also
+            // absorbs a touch's synthetic mouseenter+click double-fire.
+            if ((el as any)._animating) return;
             (el as any)._wi = ((el as any)._wi + 1) % words.length;
             scrambleEl(el, words[(el as any)._wi], 1.5); // cycle + slower decode
           };
