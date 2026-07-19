@@ -8,7 +8,6 @@
   import type { FitAddon } from '@xterm/addon-fit'
   import type { SearchAddon } from '@xterm/addon-search'
   import type { Terminal } from '@xterm/xterm'
-  import '@catppuccin/palette/css/catppuccin.css'
   import '@xterm/xterm/css/xterm.css'
   import type { RuntimeEvent, RuntimeRequest } from '../../shell/runtimeProtocol'
 
@@ -24,10 +23,6 @@
 
   function stripAnsi(text: string) {
     return text.replace(/\[[0-9;]*m/g, '')
-  }
-
-  function readThemeToken(name: string) {
-    return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
   }
 
   function clamp(value: number, min: number, max: number) {
@@ -133,22 +128,24 @@
           scrollbarSliderBackground: 'rgba(120,120,120,0.22)',
           scrollbarSliderHoverBackground: 'rgba(120,120,120,0.38)',
           scrollbarSliderActiveBackground: 'rgba(88,225,255,0.5)',
-          black: readThemeToken('--ctp-mocha-surface1'),
-          red: readThemeToken('--ctp-mocha-red'),
-          green: readThemeToken('--ctp-mocha-green'),
-          yellow: readThemeToken('--ctp-mocha-yellow'),
-          blue: readThemeToken('--ctp-mocha-blue'),
-          magenta: readThemeToken('--ctp-mocha-pink'),
-          cyan: readThemeToken('--ctp-mocha-teal'),
-          white: readThemeToken('--ctp-mocha-subtext0'),
-          brightBlack: readThemeToken('--ctp-mocha-overlay0'),
-          brightRed: readThemeToken('--ctp-mocha-red'),
-          brightGreen: readThemeToken('--ctp-mocha-green'),
-          brightYellow: readThemeToken('--ctp-mocha-yellow'),
-          brightBlue: readThemeToken('--ctp-mocha-blue'),
-          brightMagenta: readThemeToken('--ctp-mocha-pink'),
-          brightCyan: readThemeToken('--ctp-mocha-teal'),
-          brightWhite: readThemeToken('--ctp-mocha-subtext1'),
+          // Catppuccin Mocha ANSI palette, inlined (was a full @catppuccin/palette CSS
+          // import that shipped 288 unused custom properties for ~10 colors used here).
+          black: '#45475a',
+          red: '#f38ba8',
+          green: '#a6e3a1',
+          yellow: '#f9e2af',
+          blue: '#89b4fa',
+          magenta: '#f5c2e7',
+          cyan: '#94e2d5',
+          white: '#a6adc8',
+          brightBlack: '#6c7086',
+          brightRed: '#f38ba8',
+          brightGreen: '#a6e3a1',
+          brightYellow: '#f9e2af',
+          brightBlue: '#89b4fa',
+          brightMagenta: '#f5c2e7',
+          brightCyan: '#94e2d5',
+          brightWhite: '#bac2de',
         },
         linkHandler: {
           activate(event, uri) {

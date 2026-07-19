@@ -1,6 +1,6 @@
 /* ============================================================
    navon.dev — shared design system
-   fonts: VT323 + IBM Plex Mono via Google Fonts (linked in <head>)
+   fonts: VT323 · IBM Plex Mono · Geist Mono — self-hosted via @fontsource (Base.astro)
           DSEG7 (seven-segment) self-hosted · keshikan.net/fonts
    palette: neutral OKLCH; accent on the deuteranopia-safe blue↔yellow axis
    ============================================================ */
