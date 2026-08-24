@@ -1,5 +1,7 @@
 # build output
 dist/
+# playwright mcp scratch (screenshots, page snapshots, console logs)
+.playwright-mcp/
 # generated types
 .astro/
 

@@ -1,0 +1,170 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>og cat placer</title>
+<!-- Dirty local tool: drag the cat, drag the slider, copy the numbers into the defaults
+     in src/og/card.ts. The backdrop is the REAL renderer — every repaint calls cardPng()
+     — so what you see is exactly what ships. Run: bun tools/og-cat.ts -->
+<style>
+  :root { color-scheme: dark }
+  body { margin:0; background:#0b0b0b; color:#dedede;
+         font:14px/1.5 "IBM Plex Mono", ui-monospace, monospace; padding:20px }
+  h1 { font-size:13px; font-weight:600; color:#636363; margin:0 0 14px; letter-spacing:.08em }
+  #wrap { position:relative; width:1200px; height:630px; transform-origin:top left;
+          outline:1px solid #383838 }
+  #stage { position:absolute; inset:0; background-size:100% 100%; background-repeat:no-repeat }
+  #cat { position:absolute; width:48px; height:48px; cursor:grab; touch-action:none }
+  #cat.drag { cursor:grabbing }
+  #cat::after { content:""; position:absolute; inset:-6px; border:1px dashed #58d1e5; opacity:0 }
+  #cat:hover::after, #cat.drag::after { opacity:.9 }
+  #bar { display:flex; gap:18px; align-items:center; flex-wrap:wrap; margin-top:16px }
+  code { background:#1d1d1d; border:1px solid #383838; padding:6px 10px; color:#58d1e5 }
+  button { font:inherit; background:#1d1d1d; color:#dedede; border:1px solid #383838;
+           padding:6px 12px; cursor:pointer }
+  button:hover { border-color:#58d1e5; color:#58d1e5 }
+  label { color:#aeaeae; display:flex; gap:8px; align-items:center }
+  input[type=range] { width:200px; accent-color:#58d1e5 }
+  input[type=text] { font:inherit; background:#1d1d1d; color:#dedede;
+                     border:1px solid #383838; padding:5px 8px }
+  input[type=text]:focus { outline:none; border-color:#58d1e5 }
+  .hint { color:#636363 }
+  .hint.warn { color:#eec743 }
+</style>
+
+<h1>OG CAT PLACER &mdash; DRAG THE CAT &middot; ARROWS NUDGE (SHIFT = 10)</h1>
+<div id="wrap">
+  <div id="stage"></div>
+  <svg id="cat" viewBox="0 0 32 32" shape-rendering="crispEdges"><rect x="12" y="3" width="1" height="1" fill="#000000"/><rect x="20" y="3" width="1" height="1" fill="#000000"/><rect x="11" y="4" width="1" height="1" fill="#000000"/><rect x="12" y="4" width="1" height="1" fill="#ffffff"/><rect x="13" y="4" width="1" height="1" fill="#000000"/><rect x="19" y="4" width="1" height="1" fill="#000000"/><rect x="20" y="4" width="1" height="1" fill="#ffffff"/><rect x="21" y="4" width="1" height="1" fill="#000000"/><rect x="11" y="5" width="1" height="1" fill="#000000"/><rect x="12" y="5" width="2" height="1" fill="#ffffff"/><rect x="14" y="5" width="1" height="1" fill="#000000"/><rect x="18" y="5" width="1" height="1" fill="#000000"/><rect x="19" y="5" width="2" height="1" fill="#ffffff"/><rect x="21" y="5" width="1" height="1" fill="#000000"/><rect x="10" y="6" width="1" height="1" fill="#000000"/><rect x="11" y="6" width="3" height="1" fill="#ffffff"/><rect x="14" y="6" width="1" height="1" fill="#000000"/><rect x="18" y="6" width="1" height="1" fill="#000000"/><rect x="19" y="6" width="3" height="1" fill="#ffffff"/><rect x="22" y="6" width="1" height="1" fill="#000000"/><rect x="10" y="7" width="1" height="1" fill="#000000"/><rect x="11" y="7" width="4" height="1" fill="#ffffff"/><rect x="15" y="7" width="1" height="1" fill="#000000"/><rect x="17" y="7" width="1" height="1" fill="#000000"/><rect x="18" y="7" width="4" height="1" fill="#ffffff"/><rect x="22" y="7" width="1" height="1" fill="#000000"/><rect x="9" y="8" width="1" height="1" fill="#000000"/><rect x="10" y="8" width="5" height="1" fill="#ffffff"/><rect x="15" y="8" width="3" height="1" fill="#000000"/><rect x="18" y="8" width="5" height="1" fill="#ffffff"/><rect x="23" y="8" width="1" height="1" fill="#000000"/><rect x="9" y="9" width="1" height="1" fill="#000000"/><rect x="10" y="9" width="13" height="1" fill="#ffffff"/><rect x="23" y="9" width="1" height="1" fill="#000000"/><rect x="9" y="10" width="1" height="1" fill="#000000"/><rect x="10" y="10" width="3" height="1" fill="#ffffff"/><rect x="13" y="10" width="1" height="1" fill="#000000"/><rect x="14" y="10" width="5" height="1" fill="#ffffff"/><rect x="19" y="10" width="1" height="1" fill="#000000"/><rect x="20" y="10" width="3" height="1" fill="#ffffff"/><rect x="23" y="10" width="1" height="1" fill="#000000"/><rect x="9" y="11" width="1" height="1" fill="#000000"/><rect x="10" y="11" width="3" height="1" fill="#ffffff"/><rect x="13" y="11" width="1" height="1" fill="#000000"/><rect x="14" y="11" width="5" height="1" fill="#ffffff"/><rect x="19" y="11" width="1" height="1" fill="#000000"/><rect x="20" y="11" width="3" height="1" fill="#ffffff"/><rect x="23" y="11" width="1" height="1" fill="#000000"/><rect x="9" y="12" width="1" height="1" fill="#000000"/><rect x="10" y="12" width="3" height="1" fill="#ffffff"/><rect x="13" y="12" width="1" height="1" fill="#000000"/><rect x="14" y="12" width="5" height="1" fill="#ffffff"/><rect x="19" y="12" width="1" height="1" fill="#000000"/><rect x="20" y="12" width="3" height="1" fill="#ffffff"/><rect x="23" y="12" width="1" height="1" fill="#000000"/><rect x="9" y="13" width="1" height="1" fill="#000000"/><rect x="10" y="13" width="13" height="1" fill="#ffffff"/><rect x="23" y="13" width="1" height="1" fill="#000000"/><rect x="9" y="14" width="1" height="1" fill="#000000"/><rect x="10" y="14" width="1" height="1" fill="#ffffff"/><rect x="11" y="14" width="3" height="1" fill="#000000"/><rect x="14" y="14" width="2" height="1" fill="#ffffff"/><rect x="16" y="14" width="1" height="1" fill="#000000"/><rect x="17" y="14" width="2" height="1" fill="#ffffff"/><rect x="19" y="14" width="3" height="1" fill="#000000"/><rect x="22" y="14" width="1" height="1" fill="#ffffff"/><rect x="23" y="14" width="1" height="1" fill="#000000"/><rect x="10" y="15" width="1" height="1" fill="#000000"/><rect x="11" y="15" width="11" height="1" fill="#ffffff"/><rect x="22" y="15" width="1" height="1" fill="#000000"/><rect x="11" y="16" width="1" height="1" fill="#000000"/><rect x="12" y="16" width="9" height="1" fill="#ffffff"/><rect x="21" y="16" width="1" height="1" fill="#000000"/><rect x="12" y="17" width="3" height="1" fill="#000000"/><rect x="15" y="17" width="3" height="1" fill="#ffffff"/><rect x="18" y="17" width="3" height="1" fill="#000000"/><rect x="14" y="18" width="1" height="1" fill="#000000"/><rect x="15" y="18" width="3" height="1" fill="#ffffff"/><rect x="18" y="18" width="1" height="1" fill="#000000"/><rect x="13" y="19" width="1" height="1" fill="#000000"/><rect x="14" y="19" width="5" height="1" fill="#ffffff"/><rect x="19" y="19" width="1" height="1" fill="#000000"/><rect x="12" y="20" width="1" height="1" fill="#000000"/><rect x="13" y="20" width="7" height="1" fill="#ffffff"/><rect x="20" y="20" width="1" height="1" fill="#000000"/><rect x="11" y="21" width="1" height="1" fill="#000000"/><rect x="12" y="21" width="9" height="1" fill="#ffffff"/><rect x="21" y="21" width="1" height="1" fill="#000000"/><rect x="8" y="22" width="2" height="1" fill="#000000"/><rect x="11" y="22" width="1" height="1" fill="#000000"/><rect x="12" y="22" width="9" height="1" fill="#ffffff"/><rect x="21" y="22" width="1" height="1" fill="#000000"/><rect x="23" y="22" width="2" height="1" fill="#000000"/><rect x="7" y="23" width="1" height="1" fill="#000000"/><rect x="8" y="23" width="2" height="1" fill="#ffffff"/><rect x="10" y="23" width="2" height="1" fill="#000000"/><rect x="12" y="23" width="4" height="1" fill="#ffffff"/><rect x="16" y="23" width="1" height="1" fill="#000000"/><rect x="17" y="23" width="4" height="1" fill="#ffffff"/><rect x="21" y="23" width="2" height="1" fill="#000000"/><rect x="23" y="23" width="2" height="1" fill="#ffffff"/><rect x="25" y="23" width="1" height="1" fill="#000000"/><rect x="6" y="24" width="1" height="1" fill="#000000"/><rect x="7" y="24" width="4" height="1" fill="#ffffff"/><rect x="11" y="24" width="2" height="1" fill="#000000"/><rect x="13" y="24" width="3" height="1" fill="#ffffff"/><rect x="16" y="24" width="1" height="1" fill="#000000"/><rect x="17" y="24" width="3" height="1" fill="#ffffff"/><rect x="20" y="24" width="2" height="1" fill="#000000"/><rect x="22" y="24" width="4" height="1" fill="#ffffff"/><rect x="26" y="24" width="1" height="1" fill="#000000"/><rect x="6" y="25" width="1" height="1" fill="#000000"/><rect x="7" y="25" width="5" height="1" fill="#ffffff"/><rect x="12" y="25" width="1" height="1" fill="#000000"/><rect x="13" y="25" width="3" height="1" fill="#ffffff"/><rect x="16" y="25" width="1" height="1" fill="#000000"/><rect x="17" y="25" width="3" height="1" fill="#ffffff"/><rect x="20" y="25" width="1" height="1" fill="#000000"/><rect x="21" y="25" width="5" height="1" fill="#ffffff"/><rect x="26" y="25" width="1" height="1" fill="#000000"/><rect x="6" y="26" width="3" height="1" fill="#000000"/><rect x="9" y="26" width="3" height="1" fill="#ffffff"/><rect x="12" y="26" width="1" height="1" fill="#000000"/><rect x="13" y="26" width="3" height="1" fill="#ffffff"/><rect x="16" y="26" width="1" height="1" fill="#000000"/><rect x="17" y="26" width="3" height="1" fill="#ffffff"/><rect x="20" y="26" width="1" height="1" fill="#000000"/><rect x="21" y="26" width="3" height="1" fill="#ffffff"/><rect x="24" y="26" width="7" height="1" fill="#000000"/><rect x="5" y="27" width="2" height="1" fill="#000000"/><rect x="7" y="27" width="5" height="1" fill="#ffffff"/><rect x="12" y="27" width="1" height="1" fill="#000000"/><rect x="13" y="27" width="2" height="1" fill="#ffffff"/><rect x="15" y="27" width="3" height="1" fill="#000000"/><rect x="18" y="27" width="2" height="1" fill="#ffffff"/><rect x="20" y="27" width="1" height="1" fill="#000000"/><rect x="21" y="27" width="5" height="1" fill="#ffffff"/><rect x="26" y="27" width="1" height="1" fill="#000000"/><rect x="27" y="27" width="4" height="1" fill="#ffffff"/><rect x="31" y="27" width="1" height="1" fill="#000000"/><rect x="5" y="28" width="11" height="1" fill="#000000"/><rect x="17" y="28" width="14" height="1" fill="#000000"/></svg>
+</div>
+
+<div id="bar">
+  <code id="out"></code>
+  <button id="copy">copy</button>
+  <label>text <input id="title" type="text" value="Magniquick" size="18"></label>
+  <label>size <input id="size" type="range" min="60" max="170" value="108"> <span id="sizeval">108</span>px</label>
+  <label><input id="align" type="checkbox"> centre weight</label>
+  <button id="verify">verify real render</button>
+  <span class="hint" id="hint">verify bakes the cat in through the renderer &mdash; proof, not preview</span>
+</div>
+
+<script>
+const W = 1200, H = 630, CAT = 48;
+// NB: not `top` — that shadows window.top and throws "already declared", killing the file
+let catX = W - 120 - CAT, catY = 255, size = 108, verifying = false;
+let title = 'Magniquick', align = 'left';
+
+const wrap = document.getElementById('wrap'), stage = document.getElementById('stage');
+const cat = document.getElementById('cat'), out = document.getElementById('out');
+const hint = document.getElementById('hint');
+
+// fit the 1200px stage to the window; all pointer math divides back out by this
+let k = 1;
+function fit() {
+  k = Math.min(1, (window.innerWidth - 40) / W);
+  wrap.style.transform = 'scale(' + k + ')';
+  document.body.style.minHeight = (H * k + 160) + 'px';
+}
+addEventListener('resize', fit);
+fit();
+
+const clamp = (v, hi) => Math.max(0, Math.min(hi, v));
+const catRight = () => Math.round(W - catX - CAT);
+
+// Geist Mono is monospace at 0.6em advance, so line breaking is arithmetic we can
+// predict exactly. satori wraps the wordmark per word (it does not clip), so report the
+// line count — three lines starts crowding the tagline out of the frame.
+const PAD = 76, BOX = W - PAD * 2;
+function lineCount() {
+  const cw = size * 0.6;
+  const words = title.split(/\s+/).filter(Boolean);
+  let lines = 1, used = 0;
+  for (let i = 0; i < words.length; i++) {
+    const w = (words[i].length + (i === words.length - 1 ? 1 : 0)) * cw; // +1 = cursor
+    if (used && used + cw + w > BOX) { lines++; used = w; } else used += (used ? cw : 0) + w;
+  }
+  return lines;
+}
+function checkFit() {
+  const n = lineCount();
+  hint.textContent = n === 1
+    ? 'verify bakes the cat in through the renderer \u2014 proof, not preview'
+    : 'wordmark wraps to ' + n + ' lines at this size';
+  hint.classList.toggle('warn', n > 2);
+}
+
+const params = () => 'titleSize=' + size + '&align=' + align + '&title=' + encodeURIComponent(title);
+
+let pending = null;
+function render(url) {
+  clearTimeout(pending);
+  pending = setTimeout(() => { stage.style.backgroundImage = url; }, 120);
+}
+
+function paint() {
+  cat.style.left = catX + 'px';
+  cat.style.top = catY + 'px';
+  out.textContent = 'title: ' + JSON.stringify(title) + ', catTop: ' + Math.round(catY) +
+                    ', catRight: ' + catRight() + ', titleSize: ' + size +
+                    ", align: '" + align + "'";
+  checkFit();
+  if (!verifying) render('url(/render.png?cat=0&' + params() + ')');
+}
+
+let from = null;
+cat.addEventListener('pointerdown', (e) => {
+  if (verifying) return;
+  cat.setPointerCapture(e.pointerId);
+  cat.classList.add('drag');
+  from = { px: e.clientX, py: e.clientY, x: catX, y: catY };
+});
+cat.addEventListener('pointermove', (e) => {
+  if (!from) return;
+  catX = clamp(from.x + (e.clientX - from.px) / k, W - CAT);
+  catY = clamp(from.y + (e.clientY - from.py) / k, H - CAT);
+  paint();
+});
+const end = () => { from = null; cat.classList.remove('drag'); };
+cat.addEventListener('pointerup', end);
+cat.addEventListener('pointercancel', end);
+
+addEventListener('keydown', (e) => {
+  const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+  if (!d || verifying) return;
+  e.preventDefault();
+  const step = e.shiftKey ? 10 : 1;
+  catX = clamp(catX + d[0] * step, W - CAT);
+  catY = clamp(catY + d[1] * step, H - CAT);
+  paint();
+});
+
+document.getElementById('size').addEventListener('input', (e) => {
+  size = +e.target.value;
+  document.getElementById('sizeval').textContent = size;
+  if (verifying) toggle();
+  paint();
+});
+document.getElementById('title').addEventListener('input', (e) => {
+  title = e.target.value;
+  if (verifying) toggle();
+  paint();
+});
+document.getElementById('align').addEventListener('change', (e) => {
+  align = e.target.checked ? 'center' : 'left';
+  if (verifying) toggle();
+  paint();
+});
+document.getElementById('copy').addEventListener('click', () =>
+  navigator.clipboard.writeText(out.textContent));
+
+function toggle() {
+  verifying = !verifying;
+  cat.style.display = verifying ? 'none' : '';
+  document.getElementById('verify').textContent = verifying ? 'back to dragging' : 'verify real render';
+  if (verifying) {
+    render('url(/render.png?catTop=' + Math.round(catY) + '&catRight=' + catRight() +
+           '&' + params() + ')');
+  } else paint();
+}
+document.getElementById('verify').addEventListener('click', toggle);
+
+paint();
+</script>

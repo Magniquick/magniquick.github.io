@@ -36,10 +36,13 @@
     "@iconify-json/lucide": "^1.2.116",
     "@iconify-json/octicon": "^1.2.29",
     "@iconify-json/simple-icons": "^1.2.90",
+    "@resvg/resvg-js": "^2.6.2",
     "mdast-util-to-string": "^4.0.0",
     "reading-time": "^1.5.0",
     "rehype-autolink-headings": "^7.1.0",
     "rehype-slug": "^6.0.0",
-    "remark-toc": "^9.0.0"
+    "remark-toc": "^9.0.0",
+    "satori": "^0.33.4",
+    "ultrahtml": "^1.7.0"
   }
 }

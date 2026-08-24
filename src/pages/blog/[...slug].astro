@@ -14,7 +14,7 @@ const base = import.meta.env.BASE_URL;
 const fmt = (d: Date) => d.toLocaleDateString('en-CA');
 const minutesRead: string | undefined = remarkPluginFrontmatter.minutesRead;
 ---
-<Base title={`${post.data.title} — navon`} description={post.data.description}>
+<Base title={`${post.data.title} — navon`} description={post.data.description} type="article" pubDate={post.data.pubDate}>
   <div class="page">
     <a class="backlink" href={`${base}blog`}>← ~/blog</a>
     <Window name={`cat ~/blog/${post.id}.md`}>
