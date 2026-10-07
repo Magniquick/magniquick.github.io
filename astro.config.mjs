@@ -15,6 +15,7 @@ import remarkToc from 'remark-toc';
 import rehypeSlug from 'rehype-slug';
 import rehypeAutolinkHeadings from 'rehype-autolink-headings';
 import { remarkReadingTime } from './remark-reading-time.mjs';
+import { rehypeTableScroll } from './rehype-table-scroll.mjs';
 
 // The ./shell terminal loads Pyodide from same-origin /pyodide/*. Those ~12 MB of
 // runtime files ship inside the pinned `pyodide` npm package, so we copy them out of
@@ -62,8 +63,15 @@ export default defineConfig({
   // base: '/web-prototypes',
   // inline all CSS into the HTML so first paint needs a single round-trip (14 kB rule)
   build: { inlineStylesheets: 'always' },
-  // allow astro:assets to optimize the remote GitHub avatar at build time
-  image: { domains: ['avatars.githubusercontent.com'] },
+  // allow astro:assets to optimize remote images at build time: the GitHub avatar, and
+  // <SongRecc> cover art from Apple (is1-ssl.mzstatic.com, …) and Spotify CDNs
+  image: {
+    domains: ['avatars.githubusercontent.com', 'i.scdn.co'],
+    remotePatterns: [
+      { protocol: 'https', hostname: '**.mzstatic.com' },
+      { protocol: 'https', hostname: '**.spotifycdn.com' },
+    ],
+  },
   integrations: [
     // expressiveCode must precede mdx() so it handles md/mdx code fences.
     // Code blocks render in terminal/editor frames — same window-chrome motif.
@@ -119,7 +127,7 @@ export default defineConfig({
     // EC owns code blocks.
     processor: unified({
       remarkPlugins: [remarkReadingTime, [remarkToc, { heading: 'contents', maxDepth: 3 }]],
-      rehypePlugins: [rehypeSlug, [rehypeAutolinkHeadings, { behavior: 'wrap' }]],
+      rehypePlugins: [rehypeSlug, [rehypeAutolinkHeadings, { behavior: 'wrap' }], rehypeTableScroll],
     }),
   },
 });

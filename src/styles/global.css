@@ -87,8 +87,8 @@ header.site{max-width:var(--maxw); margin:0 auto; padding:40px var(--pad) 26px; 
 /* ---- bento columns ---- */
 .grid{max-width:var(--maxw); margin:0 auto; padding-inline:var(--pad); display:flex; gap:12px; align-items:flex-start; justify-content:center}
 .col{display:flex; flex-direction:column; gap:12px; min-width:0}
-.col.side{flex:0 1 340px}
-.col.main{flex:1 1 auto; max-width:820px}
+.col.side{flex:0 0 340px}
+.col.main{flex:1 1 0; max-width:820px}
 @media (max-width:900px){
   .grid{flex-direction:column; align-items:stretch; max-width:640px} .col{flex:1 1 auto} .col.main{max-width:none}
   header.site{flex-direction:column; align-items:stretch; max-width:640px}
@@ -204,7 +204,7 @@ footer.site{max-width:var(--maxw); margin:26px auto 0; padding-inline:var(--pad)
 /* ============================================================
    blog — post list + prose
    ============================================================ */
-.page{max-width:760px; margin:0 auto; padding-top:34px}
+.page{max-width:880px; margin:0 auto; padding-top:34px}
 .postlist{display:flex; flex-direction:column; gap:2px}
 .postlist a{display:flex; justify-content:space-between; gap:12px; align-items:baseline; padding:9px 4px; border-bottom:1px dashed var(--line); color:var(--txt-1)}
 .postlist a:hover{color:var(--accent)}
@@ -226,9 +226,35 @@ footer.site{max-width:var(--maxw); margin:26px auto 0; padding-inline:var(--pad)
 .prose .expressive-code{margin:1.1em 0}
 .prose blockquote{border-left:2px solid var(--accent); margin:1em 0; padding:.2em 0 .2em 14px; color:var(--txt-3); font-style:italic}
 .prose hr{border:0; border-top:1px dashed var(--line); margin:2em 0}
+/* post images: fit the column, window-style frame. :where() keeps specificity at zero
+   so components that style their own <img> (e.g. SongRecc's cover) win without a fight. */
+:where(.prose) img{display:block; max-width:100%; height:auto; margin-inline:auto; border:1px solid var(--line); border-radius:5px; background:var(--bg-2)}
+:where(.prose) > img{margin-block:1.2em}
+:where(.prose) figure{margin:1.4em 0}
+:where(.prose) figcaption{margin-top:7px; text-align:center; font-size:12.5px; color:var(--txt-3)}
+/* tables: GFM pipe tables, wrapped in .table-scroll by rehype-table-scroll.mjs, which
+   also tags column sizing. The frame shrinks to fit small tables. th only defaults to
+   left when GFM gave it no alignment of its own. */
+.prose .table-scroll{overflow-x:auto; width:fit-content; max-width:100%; margin:1.2em 0; border:1px solid var(--line); border-radius:5px}
+.prose .table-scroll:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+.prose table{border-collapse:collapse; font-size:13.5px; font-variant-numeric:tabular-nums}
+.prose th,.prose td{padding:7px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+.prose th{color:var(--txt-1); font-weight:600; background:var(--bg-2); white-space:nowrap}
+.prose th:not([align]){text-align:left}
+/* column sizing, tagged at build time: short / unbreakable columns stay on one line,
+   prose columns take the rest but keep a readable minimum (the frame scrolls past it) */
+.prose td.nw{white-space:nowrap}
+.prose td.wrap{min-width:26ch}
+.prose tbody tr:last-child td{border-bottom:0}
+.prose tbody tr:hover{background:color-mix(in srgb, var(--accent) 5%, transparent)}
 .posthead{margin-bottom:26px}
-.posthead .meta{color:var(--txt-3); font-size:12.5px; margin-top:8px; display:flex; gap:12px; flex-wrap:wrap; align-items:center}
-.posthead .meta time{font-family:var(--seg); color:var(--accent)}
+.posthead .meta{color:var(--txt-3); font-size:12.5px; margin-top:8px; display:flex; gap:4px 9px; flex-wrap:wrap; align-items:baseline}
+.posthead .meta > * + *::before{content:"\00b7"; margin-right:9px; color:var(--txt-4)}
+/* DSEG7 digits fill the em box, so the date runs smaller to match Plex's digit height */
+.posthead .meta .lcd{font-size:10.5px; isolation:isolate}
+.posthead .tags{display:inline; margin-top:0}
+.posthead .tag{border:0; padding:0; font-size:inherit}
+.posthead .tag + .tag{margin-left:8px}
 .backlink{color:var(--txt-3); font-size:13px; display:inline-block; margin-bottom:20px}
 .backlink:hover{color:var(--accent)}
 
@@ -247,6 +273,13 @@ footer.site{max-width:var(--maxw); margin:26px auto 0; padding-inline:var(--pad)
 .term-actions button:hover,.term-actions button.active{color:#58e1ff; border-color:#58e1ff}
 .term-host{flex:1; min-height:0; padding:8px 6px 6px 10px; overflow:hidden}
 .term-host .xterm{height:100%}
+/* Soft-keyboard input row. 16px on the field is load-bearing: iOS Safari zooms the page
+   when a focused input is smaller than that, which would scale the terminal out of view. */
+.term-input{display:flex; align-items:center; gap:5px; padding:6px 8px calc(6px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); font-family:var(--mono)}
+.term-input input{flex:1; min-width:0; font:inherit; font-size:16px; color:var(--txt-1); background:transparent; border:none; outline:none}
+.term-input input::placeholder{color:var(--txt-3)}
+.term-input button{font:inherit; font-size:13px; color:var(--txt-3); background:transparent; border:1px solid var(--line); border-radius:5px; min-width:34px; min-height:34px; padding:0 6px; cursor:pointer; touch-action:manipulation}
+.term-input button:active{color:#58e1ff; border-color:#58e1ff}
 .term-search{display:flex; align-items:center; gap:8px; padding:7px 12px; border-top:1px solid var(--line); font-family:var(--mono); font-size:12.5px}
 .term-search .p{color:#58e1ff}
 .term-search input{flex:1; font:inherit; color:var(--txt-1); background:transparent; border:none; outline:none}

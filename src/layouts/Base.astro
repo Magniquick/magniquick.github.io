@@ -37,7 +37,7 @@ const ogImage = new URL(`${base}og.png`, Astro.site);
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />
   {/* Cross-origin isolation for the ./shell terminal's pyodide (SharedArrayBuffer) is
       set up on demand: the shell launcher registers coi-serviceworker.js and reloads
       only when someone actually boots the shell, so other visitors pay nothing. */}

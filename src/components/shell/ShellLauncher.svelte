@@ -198,7 +198,7 @@
     display: flex;
     flex-direction: column;
     width: min(1100px, 94vw);
-    height: min(680px, 88vh);
+    height: min(680px, 88dvh);
     background: var(--bg-2);
     border: 1px solid var(--line);
     border-radius: 9px;
@@ -246,5 +246,20 @@
   .modal-body {
     flex: 1;
     min-height: 0;
+  }
+
+  /* Phones give the terminal the whole viewport. Paired with
+     interactive-widget=resizes-content, dvh tracks the space left above the on-screen
+     keyboard, so the input row stays visible while typing. */
+  @media (max-width: 640px) {
+    .overlay {
+      padding: 0;
+    }
+    .modal {
+      width: 100vw;
+      height: 100dvh;
+      border: 0;
+      border-radius: 0;
+    }
   }
 </style>

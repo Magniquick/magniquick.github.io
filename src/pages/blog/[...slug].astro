@@ -1,6 +1,7 @@
 ---
 import Base from '../../layouts/Base.astro';
 import Window from '../../components/Window.astro';
+import Lcd from '../../components/Lcd.astro';
 import { getCollection, render } from 'astro:content';
 
 export async function getStaticPaths() {
@@ -22,7 +23,7 @@ const minutesRead: string | undefined = remarkPluginFrontmatter.minutesRead;
         <header class="posthead">
           <h1>{post.data.title}</h1>
           <div class="meta">
-            <time datetime={post.data.pubDate.toISOString()}>{fmt(post.data.pubDate)}</time>
+            <time datetime={post.data.pubDate.toISOString()}><Lcd ghost="8888-88-88" acc>{fmt(post.data.pubDate)}</Lcd></time>
             {minutesRead && <span>{minutesRead}</span>}
             {post.data.updatedDate && <span>updated {fmt(post.data.updatedDate)}</span>}
             {post.data.tags.length > 0 && (

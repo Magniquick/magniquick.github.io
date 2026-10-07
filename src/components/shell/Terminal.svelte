@@ -42,6 +42,28 @@
   let searchValue = $state('')
   let searchOpen = $state(false)
 
+  // Soft-keyboard devices never type into xterm's hidden textarea. Android IMEs compose
+  // into it, and xterm's CompositionHelper re-sends the whole composed word on space after
+  // its keydown path already sent each character, so words duplicate as you type. On those
+  // devices xterm runs with disableStdin (textarea goes readOnly, no OS keyboard, no data
+  // events) and this real <input> hands whole lines to the same line editor instead.
+  let touchInput = $state(false)
+  let lineDraft = $state('')
+  let lineInputEl = $state<HTMLInputElement | null>(null)
+
+  // Assigned when the terminal mounts; the line editor lives in the $effect closure below.
+  let lineApi: {
+    submit: (line: string) => void
+    complete: (line: string) => void
+    interrupt: () => void
+    recall: () => void
+  } | null = null
+
+  function submitLine(event: Event) {
+    event.preventDefault()
+    lineApi?.submit(lineDraft)
+  }
+
   let worker: Worker | null = null
   let terminal: Terminal | null = null
   let fitAddon: FitAddon | null = null
@@ -95,6 +117,8 @@
   $effect(() => {
     if (!terminalHost) return
 
+    touchInput = window.matchMedia('(hover: none) and (pointer: coarse)').matches
+
     let disposed = false
     let resizeObserver: ResizeObserver | null = null
     let onDataDispose: { dispose: () => void } | null = null
@@ -113,6 +137,7 @@
         allowTransparency: true,
         convertEol: true,
         cursorBlink: true,
+        disableStdin: touchInput,
         // Match the site's mono stack; ANSI colors below stay Catppuccin for program output.
         fontFamily: '"IBM Plex Mono", ui-monospace, "Cascadia Code", monospace',
         fontSize: 14,
@@ -318,6 +343,41 @@
         postToWorker({ type: 'interrupt' })
       }
 
+      // Touch path: the <input> owns the text, so `input` stays empty and nothing is echoed
+      // until the line is sent. That also sidesteps the redraw, which assumes the prompt plus
+      // the typed line fit on one row — they rarely do at a phone's ~46 columns.
+      lineApi = {
+        submit: (line) => {
+          if (!ready || busy) return
+          lineDraft = ''
+          input = line
+          cursor = line.length
+          terminal?.write(line)
+          commitInput()
+        },
+        complete: (line) => {
+          if (!ready || busy || completionPending) return
+          completionPending = true
+          postToWorker({ type: 'complete', line, cursor: line.length })
+        },
+        interrupt: () => {
+          if (!ready) return
+          lineDraft = ''
+          interrupt()
+        },
+        recall: () => {
+          if (history.length === 0) return
+          if (historyIndex === history.length) historyDraft = lineDraft
+          historyIndex = historyIndex <= 0 ? history.length : historyIndex - 1
+          lineDraft = historyIndex === history.length ? historyDraft : (history[historyIndex] ?? '')
+        },
+      }
+
+      const focusLineInput = () => {
+        lineInputEl?.focus()
+      }
+      if (touchInput) terminalHost.addEventListener('click', focusLineInput)
+
       onDataDispose = terminal.onData((data) => {
         if (!ready) return
 
@@ -481,6 +541,7 @@
             historySearchOriginalInput = ''
             historySearchIndex = -1
             cursor = 0
+            lineDraft = ''
             historyIndex = history.length
             terminal?.write(message.value)
             renderedInputLines = promptLineCount(stripAnsi(message.value))
@@ -488,6 +549,15 @@
             return
           case 'completion':
             completionPending = false
+            if (touchInput) {
+              lineDraft = message.line
+              if (message.suggestions && message.suggestions.length > 1) {
+                const activePrompt = currentPrompt()
+                terminal?.write(`\r\n${message.suggestions.join('  ')}\r\n${activePrompt}`)
+                renderedInputLines = promptLineCount(stripAnsi(activePrompt))
+              }
+              return
+            }
             input = message.line
             cursor = message.cursor
             if (message.suggestions && message.suggestions.length > 1) {
@@ -524,6 +594,7 @@
 
       return () => {
         worker?.removeEventListener('message', handleWorkerMessage)
+        terminalHost?.removeEventListener('click', focusLineInput)
       }
     }
 
@@ -540,6 +611,7 @@
       fitAddon = null
       searchAddon = null
       worker = null
+      lineApi = null
       ready = false
     }
   })
@@ -558,6 +630,27 @@
   </div>
 
   <div class="term-host" bind:this={terminalHost}></div>
+
+  {#if touchInput}
+    <form class="term-input" onsubmit={submitLine}>
+      <input
+        bind:this={lineInputEl}
+        bind:value={lineDraft}
+        type="text"
+        autocapitalize="off"
+        autocomplete="off"
+        autocorrect="off"
+        spellcheck="false"
+        enterkeyhint="send"
+        aria-label="terminal input"
+        placeholder={status === 'running' ? 'running…' : 'type a command'}
+      />
+      <button type="button" aria-label="previous command" onclick={() => lineApi?.recall()}>↑</button>
+      <button type="button" aria-label="tab complete" onclick={() => lineApi?.complete(lineDraft)}>⇥</button>
+      <button type="button" aria-label="interrupt" onclick={() => lineApi?.interrupt()}>^C</button>
+      <button type="submit" aria-label="run">↵</button>
+    </form>
+  {/if}
 
   {#if searchOpen}
     <div class="term-search">

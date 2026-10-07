@@ -1,0 +1,26 @@
+{
+  "spotify:0W9jWMTASe0JmydIrXwSEz": {
+    "title": "Spectator",
+    "artist": "Friday Pilots Club",
+    "art": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/43/22/f3/4322f324-95b2-98c3-8f7a-048ee96307f3/193436379953_WeDontWannaTalkART.jpg/300x300bb.jpg",
+    "links": {
+      "spotify": "https://open.spotify.com/track/0W9jWMTASe0JmydIrXwSEz",
+      "apple": "https://music.apple.com/us/album/spectator/1741002691?i=1741002984",
+      "ytmusic": "https://music.youtube.com/search?q=Friday%20Pilots%20Club%20Spectator",
+      "songlink": "https://song.link/s/0W9jWMTASe0JmydIrXwSEz"
+    },
+    "artFile": "spotify-0W9jWMTASe0JmydIrXwSEz.jpg"
+  },
+  "spotify:1FTSo4v6BOZH9QxKc3MbVM": {
+    "title": "Song 2 - 2012 Remaster",
+    "artist": "Blur",
+    "art": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/3a/ec/62/3aec62c5-3706-5004-6fea-fd6c7ca1b970/5099991502551.jpg/300x300bb.jpg",
+    "links": {
+      "spotify": "https://open.spotify.com/track/1FTSo4v6BOZH9QxKc3MbVM",
+      "apple": "https://music.apple.com/us/album/song-2-2012-remaster/699606046?i=699606050",
+      "ytmusic": "https://music.youtube.com/search?q=Blur%20Song%202%20-%202012%20Remaster",
+      "songlink": "https://song.link/s/1FTSo4v6BOZH9QxKc3MbVM"
+    },
+    "artFile": "spotify-1FTSo4v6BOZH9QxKc3MbVM.jpg"
+  }
+}

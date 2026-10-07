@@ -19,13 +19,12 @@ regret tables over information sets. I wanted to know whether a plain
 **Double DQN** — value-based, model-free — could recover something Nash-like
 without any of that machinery.
 
+Plus, neural networks are cool :D
+
 ## the result
 
 - A working Gymnasium environment for Kuhn Poker (the first I could find).
 - Double DQN converges to Nash-like strategies in **1–2 hours** on the MX250.
 - The whole forward pass fits in **~3 MB**.
-
-> The point isn't that DQN beats CFR — it doesn't, in general. The point is how
-> *little* compute you need to get respectable play on a small game.
 
 Paper and code are linked from the [research repo](https://github.com/Magniquick/reinforcement-learning).
